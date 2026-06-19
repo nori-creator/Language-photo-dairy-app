@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '@/store/AppStore';
@@ -12,29 +14,30 @@ import { IdentifyCandidate, VocabCard } from '@/types';
 
 type Phase = 'idle' | 'analyzing' | 'confirm' | 'building';
 
-/** Mock "viewfinder" subjects (no physical camera in this environment). */
-const SUBJECTS = ['🍎', '🐶', '☕', '🚏'];
-
 export default function CaptureScreen() {
   const { profile, capturedToday, addCard } = useApp();
   const colors = useColors();
 
+  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView>(null);
+
   const [phase, setPhase] = useState<Phase>('idle');
   const [candidates, setCandidates] = useState<IdentifyCandidate[]>([]);
-  const [shotEmoji, setShotEmoji] = useState('🍎');
+  const [shotPhoto, setShotPhoto] = useState('🍎');
   const [manual, setManual] = useState('');
-  const [gotcha, setGotcha] = useState<{ emoji: string; word: string } | null>(null);
+  const [gotcha, setGotcha] = useState<{ sticker: string; word: string } | null>(null);
 
   const remaining = remainingCaptures(profile.plan, capturedToday);
   const allowed = canCapture(profile.plan, capturedToday);
 
-  const shoot = async (emoji: string) => {
+  /** Kick off the analyze → confirm pipeline for a captured photo URI. */
+  const shoot = async (photo: string) => {
     if (!allowed) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    setShotEmoji(emoji);
+    setShotPhoto(photo);
     setPhase('analyzing');
     const results = await services.identify.identify({
-      photo: emoji,
+      photo,
       target: profile.targetLanguage,
       native: profile.nativeLanguage,
     });
@@ -42,16 +45,35 @@ export default function CaptureScreen() {
     setPhase('confirm');
   };
 
+  const takePhoto = async () => {
+    if (!cameraRef.current || !allowed) return;
+    try {
+      const pic = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      if (pic?.uri) shoot(pic.uri);
+    } catch {
+      /* shutter failed — stay idle */
+    }
+  };
+
+  const pickFromLibrary = async () => {
+    if (!allowed) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]?.uri) shoot(result.assets[0].uri);
+  };
+
   const confirm = async (c: IdentifyCandidate) => {
     setPhase('building');
     const [{ sticker }, fields] = await Promise.all([
-      services.cutout.cutout({ photo: shotEmoji }),
+      services.cutout.cutout({ photo: shotPhoto }),
       services.enrich.enrich({ word: c.word, target: profile.targetLanguage, native: profile.nativeLanguage }),
     ]);
     const card: VocabCard = {
       id: `c_${Date.now()}`,
       sticker,
-      photo: shotEmoji,
+      photo: shotPhoto,
       targetLanguage: profile.targetLanguage,
       word: c.word,
       categoryId: c.categoryId,
@@ -62,14 +84,14 @@ export default function CaptureScreen() {
       capturedAt: new Date().toISOString(),
     };
     addCard(card);
-    setGotcha({ emoji: sticker, word: c.word });
+    setGotcha({ sticker, word: c.word });
     reset();
   };
 
   const confirmManual = () => {
     const word = manual.trim();
     if (!word) return;
-    confirm({ word, reading: '', nativeTranslation: '', emoji: shotEmoji, categoryId: 'object', confidence: 1 });
+    confirm({ word, reading: '', nativeTranslation: '', emoji: shotPhoto, categoryId: 'object', confidence: 1 });
     setManual('');
   };
 
@@ -77,6 +99,8 @@ export default function CaptureScreen() {
     setPhase('idle');
     setCandidates([]);
   };
+
+  const hasCameraPermission = permission?.granted ?? false;
 
   return (
     <ScrollView
@@ -99,7 +123,7 @@ export default function CaptureScreen() {
       <View style={[styles.viewfinder, { backgroundColor: '#000' }]}>
         {phase === 'analyzing' ? (
           <View style={styles.center}>
-            <Sticker emoji={shotEmoji} size={120} />
+            <Sticker emoji={shotPhoto} size={120} />
             <ActivityIndicator color="#fff" style={{ marginTop: spacing.lg }} />
             <AppText variant="subhead" color="#fff" style={{ marginTop: spacing.sm }}>
               AIが分析中…
@@ -112,17 +136,19 @@ export default function CaptureScreen() {
               カードを作成中…
             </AppText>
           </View>
+        ) : phase === 'idle' && hasCameraPermission && allowed ? (
+          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
         ) : (
           <View style={styles.center}>
             <Ionicons name="scan-outline" size={64} color="rgba(255,255,255,0.5)" />
             <AppText variant="footnote" color="rgba(255,255,255,0.7)" style={{ marginTop: spacing.md }}>
-              撮りたい被写体をタップ（デモ用）
+              {allowed ? 'カメラの準備中…' : '今日の上限に達しました'}
             </AppText>
           </View>
         )}
       </View>
 
-      {/* Idle: subject chooser + shutter */}
+      {/* Idle controls */}
       {phase === 'idle' && (
         <>
           {!allowed && (
@@ -134,17 +160,38 @@ export default function CaptureScreen() {
               <PrimaryButton title="Proにアップグレード" onPress={() => {}} />
             </View>
           )}
-          {allowed && (
-            <View style={styles.subjects}>
-              {SUBJECTS.map((e) => (
-                <Pressable
-                  key={e}
-                  onPress={() => shoot(e)}
-                  style={[styles.subject, { backgroundColor: colors.secondarySystemGroupedBackground }]}
-                >
-                  <AppText style={{ fontSize: 34 }}>{e}</AppText>
-                </Pressable>
-              ))}
+
+          {allowed && !hasCameraPermission && (
+            <View style={[styles.limit, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
+              <AppText variant="headline">カメラを使う準備</AppText>
+              <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginVertical: spacing.sm }}>
+                被写体を撮ってカードにするために、カメラの使用を許可してください。
+              </AppText>
+              <PrimaryButton title="カメラを許可する" onPress={requestPermission} />
+              <PrimaryButton
+                title="ライブラリから選ぶ"
+                onPress={pickFromLibrary}
+                variant="plain"
+                style={{ marginTop: spacing.sm }}
+              />
+            </View>
+          )}
+
+          {allowed && hasCameraPermission && (
+            <View style={styles.shutterRow}>
+              <Pressable
+                onPress={pickFromLibrary}
+                style={[styles.sideButton, { backgroundColor: colors.secondarySystemGroupedBackground }]}
+              >
+                <Ionicons name="images-outline" size={24} color={colors.label} />
+              </Pressable>
+
+              <Pressable onPress={takePhoto} style={[styles.shutterOuter, { borderColor: colors.label }]}>
+                <View style={[styles.shutterInner, { backgroundColor: colors.label }]} />
+              </Pressable>
+
+              {/* Spacer to keep the shutter centered */}
+              <View style={styles.sideButton} />
             </View>
           )}
         </>
@@ -192,7 +239,7 @@ export default function CaptureScreen() {
 
       <GotchaOverlay
         visible={!!gotcha}
-        emoji={gotcha?.emoji ?? '🍎'}
+        emoji={gotcha?.sticker ?? '🍎'}
         word={gotcha?.word ?? ''}
         onDone={() => setGotcha(null)}
       />
@@ -205,9 +252,14 @@ const styles = StyleSheet.create({
   quota: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.md },
   viewfinder: { height: 280, borderRadius: radius.lg, overflow: 'hidden' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  subjects: { flexDirection: 'row', justifyContent: 'space-between' },
-  subject: { width: 72, height: 72, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   limit: { padding: spacing.lg, borderRadius: radius.lg, alignItems: 'center' },
+  shutterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
+  sideButton: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  shutterOuter: {
+    width: 76, height: 76, borderRadius: 38, borderWidth: 4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  shutterInner: { width: 60, height: 60, borderRadius: 30 },
   confirm: {},
   candidate: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,

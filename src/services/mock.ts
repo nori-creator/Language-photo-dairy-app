@@ -5,7 +5,10 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * A tiny offline "dictionary" so the whole flow is demonstrable without any
- * API keys. Keyed by an emoji subject the mock camera can produce.
+ * API keys. Keyed by emoji subjects; when a real photo URI comes in (no emoji
+ * match) the identifier falls back to a few sample candidates so the
+ * confirmation UI still works. The real implementation will recognize the
+ * subject directly from the photo via Claude Vision.
  */
 const SEED: Record<string, { candidate: IdentifyCandidate; fields: EnrichedFields }> = {
   '🍎': {
@@ -83,7 +86,8 @@ export const mockIdentify: IdentifyService = {
 export const mockCutout: CutoutService = {
   async cutout({ photo }) {
     await delay(900);
-    // The "cut-out sticker" is represented by the subject emoji in the mock.
+    // No real background removal in the mock: pass the photo (emoji or URI)
+    // straight through as the "sticker" so the captured image becomes the card.
     return { sticker: photo };
   },
 };

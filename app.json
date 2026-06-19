@@ -22,7 +22,19 @@
       "output": "single"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "撮った被写体を単語カードにするためにカメラを使用します。"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "写真から単語カードを作成するためにライブラリにアクセスします。"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
