@@ -8,7 +8,8 @@
 // deno-lint-ignore-file no-explicit-any
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
-const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.0-flash';
+// gemini-2.5-flash-lite has the largest free-tier quota and is multimodal.
+const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash-lite';
 const REMOVEBG_API_KEY = Deno.env.get('REMOVEBG_API_KEY') ?? '';
 
 const CORS = {
@@ -40,10 +41,11 @@ function parseJson(text: string): any {
 }
 
 /** Call Gemini generateContent. No responseSchema (fragile across models) —
- *  we ask for JSON via responseMimeType + prompt and parse defensively. */
-async function callGemini(parts: any[]): Promise<any> {
+ *  we ask for JSON via responseMimeType + prompt and parse defensively.
+ *  `model` can be overridden per request (used to find one with free quota). */
+async function callGemini(parts: any[], model = GEMINI_MODEL): Promise<any> {
   const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -79,10 +81,10 @@ async function identify(body: any) {
     `"categoryId" (one of: ${CATEGORY_IDS.join(', ')}; use "object" if unsure), ` +
     `"confidence" (number 0..1). No markdown, no extra text.`;
 
-  const candidates = await callGemini([
-    { text: prompt },
-    { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } },
-  ]);
+  const candidates = await callGemini(
+    [{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }],
+    body.model,
+  );
   return json({ candidates: Array.isArray(candidates) ? candidates : [] });
 }
 
@@ -99,7 +101,7 @@ async function enrich(body: any) {
     `"synonyms" (array), "antonyms" (array), "etymology" (string), "note" (one memorable line). ` +
     `Use empty arrays/strings when not applicable. No markdown, no extra text.`;
 
-  const fields = await callGemini([{ text: prompt }]);
+  const fields = await callGemini([{ text: prompt }], body.model);
   return json({ fields });
 }
 

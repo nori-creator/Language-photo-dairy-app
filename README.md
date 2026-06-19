@@ -79,11 +79,15 @@ APIキーは**アプリに埋め込まず**、Supabase Edge Function のシー�
    supabase link --project-ref <your-project-ref>
    supabase db push                       # supabase/migrations を適用
    ```
-3. **Edge Function をデプロイ**し、Gemini キーをサーバー側シークレットに設定：
+3. **Edge Function をデプロイ**し、各キーをサーバー側シークレットに設定：
    ```bash
    supabase functions deploy ai --no-verify-jwt
    supabase secrets set GEMINI_API_KEY=<あなたの新しいGeminiキー>
+   # 任意：物体の切り抜き（背景除去）を有効化する場合
+   supabase secrets set REMOVEBG_API_KEY=<remove.bgの無料APIキー>
    ```
+   - 使用モデルは既定で **`gemini-2.5-flash-lite`**（無料枠が最大）。`supabase secrets set GEMINI_MODEL=...` で上書き可。
+   - `REMOVEBG_API_KEY` 未設定時は切り抜きをスキップし、撮った写真をそのままカード画像に使用。
 4. **アプリの環境変数**を設定（`.env.example` をコピー）：
    ```bash
    cp .env.example .env
@@ -92,7 +96,7 @@ APIキーは**アプリに埋め込まず**、Supabase Edge Function のシー�
 5. `npx expo start -c` で再起動。`EXPO_PUBLIC_SUPABASE_URL` が設定されていれば、
    `src/services/index.ts` が自動で **実 Gemini 接続**に切り替わります（未設定ならモックのまま）。
 
-> 切り抜き（背景除去）と発音TTSは現状モック（撮った写真をそのままカード画像に使用）。次フェーズで実API化。
+> identify（写真→単語）・enrich（意味/例文）・cutout（remove.bg背景除去）が実API。発音TTSは次フェーズ。
 
 ## iOS ビルド（Mac 不要）
 
