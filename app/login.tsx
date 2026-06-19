@@ -20,11 +20,20 @@ export default function LoginScreen() {
       return;
     }
     setBusy(true);
-    const fn = mode === 'signIn' ? supabase.auth.signInWithPassword : supabase.auth.signUp;
-    const { error } = await fn({ email: email.trim(), password });
-    setBusy(false);
-    if (error) setError(error.message);
-    // On success, the auth listener in AppStore redirects automatically.
+    try {
+      // Call as methods so Supabase keeps its internal `this` binding.
+      const creds = { email: email.trim(), password };
+      const { error } =
+        mode === 'signIn'
+          ? await supabase.auth.signInWithPassword(creds)
+          : await supabase.auth.signUp(creds);
+      if (error) setError(error.message);
+      // On success, the auth listener in AppStore redirects automatically.
+    } catch (e: any) {
+      setError(e?.message ?? '通信エラーが発生しました。もう一度お試しください。');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const inputStyle = [styles.input, { backgroundColor: colors.secondarySystemGroupedBackground, color: colors.label }];
@@ -35,7 +44,6 @@ export default function LoginScreen() {
       style={[styles.flex, { backgroundColor: colors.systemGroupedBackground }]}
     >
       <View style={styles.content}>
-        <AppText style={styles.logo}>📸</AppText>
         <AppText variant="largeTitle" style={styles.title}>Lexilog</AppText>
         <AppText variant="subhead" color={colors.secondaryLabel} style={styles.tagline}>
           撮るだけで、ことばが集まる。
@@ -97,8 +105,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
-  logo: { fontSize: 64, textAlign: 'center' },
-  title: { textAlign: 'center', marginTop: spacing.sm },
+  title: { textAlign: 'center' },
   tagline: { textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.xxl },
   warn: { padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.lg, alignItems: 'center' },
   form: { gap: spacing.sm },
