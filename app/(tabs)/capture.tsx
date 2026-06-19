@@ -1,16 +1,19 @@
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppStore';
 import { services } from '@/services';
 import { canCapture, remainingCaptures } from '@/lib/quota';
 import { initialSrs } from '@/lib/srs';
 import { uploadImage } from '@/lib/storage';
 import { radius, spacing, useColors } from '@/theme';
-import { AppText, GotchaOverlay, PrimaryButton, ScanOverlay, Sticker } from '@/components';
+import { AppText, GotchaOverlay, PrimaryButton, ScanOverlay } from '@/components';
 import { IdentifyCandidate, VocabCard } from '@/types';
 
 type Phase = 'idle' | 'analyzing' | 'confirm' | 'building';
@@ -18,6 +21,9 @@ type Phase = 'idle' | 'analyzing' | 'confirm' | 'building';
 export default function CaptureScreen() {
   const { profile, capturedToday, addCard, session } = useApp();
   const colors = useColors();
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  const { height: screenH } = useWindowDimensions();
 
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -31,6 +37,15 @@ export default function CaptureScreen() {
 
   const remaining = remainingCaptures(profile.plan, capturedToday);
   const allowed = canCapture(profile.plan, capturedToday);
+  const hasCameraPermission = permission?.granted ?? false;
+
+  // Full-screen, chrome-free experience while the camera / scanner is up.
+  const immersive = phase === 'analyzing' || (phase === 'idle' && hasCameraPermission && allowed);
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: !immersive });
+  }, [immersive, navigation]);
+
+  const quotaText = profile.plan === 'pro' ? 'Pro · 撮り放題' : `今日あと ${remaining} 枚`;
 
   /** Kick off the analyze → confirm pipeline for a captured photo. */
   const shoot = async (photo: string, imageBase64?: string) => {
@@ -131,8 +146,44 @@ export default function CaptureScreen() {
     setCandidates([]);
   };
 
-  const hasCameraPermission = permission?.granted ?? false;
+  // ── Full-screen camera / scanner ─────────────────────────────────────────
+  if (immersive) {
+    return (
+      <View style={styles.fsRoot}>
+        {phase === 'analyzing' ? (
+          <>
+            <Image source={{ uri: shotPhoto }} style={StyleSheet.absoluteFill} contentFit="cover" />
+            <ScanOverlay height={screenH} />
+          </>
+        ) : (
+          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
+        )}
 
+        {/* Quota pill */}
+        <View style={[styles.fsTop, { top: insets.top + spacing.sm }]} pointerEvents="none">
+          <View style={styles.fsPill}>
+            <Ionicons name="flash-outline" size={15} color="#FFD60A" />
+            <AppText variant="footnote" color="#fff">{quotaText}</AppText>
+          </View>
+        </View>
+
+        {/* Shutter controls (camera only) */}
+        {phase === 'idle' && (
+          <View style={[styles.fsControls, { paddingBottom: insets.bottom + spacing.xxl }]}>
+            <Pressable onPress={pickFromLibrary} style={styles.fsSide}>
+              <Ionicons name="images-outline" size={26} color="#fff" />
+            </Pressable>
+            <Pressable onPress={takePhoto} style={styles.shutterOuter}>
+              <View style={styles.shutterInner} />
+            </Pressable>
+            <View style={styles.fsSide} />
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // ── Result / setup states (scrollable) ───────────────────────────────────
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
@@ -145,38 +196,22 @@ export default function CaptureScreen() {
         <AppText variant="subhead" color={colors.secondaryLabel} style={{ flex: 1 }}>
           {profile.plan === 'pro' ? 'Pro · 撮り放題' : `今日あと ${remaining} 枚（無料プラン）`}
         </AppText>
-        {profile.plan === 'free' && (
-          <AppText variant="subhead" color={colors.blue}>Proにする</AppText>
-        )}
+        {profile.plan === 'free' && <AppText variant="subhead" color={colors.blue}>Proにする</AppText>}
       </View>
 
-      {/* Viewfinder */}
-      <View style={[styles.viewfinder, { backgroundColor: '#000' }]}>
-        {phase === 'analyzing' ? (
-          <View style={styles.fill}>
-            <Sticker emoji={shotPhoto} size={280} />
-            <ScanOverlay height={280} />
-          </View>
-        ) : phase === 'building' ? (
+      {/* Building card */}
+      {phase === 'building' && (
+        <View style={[styles.viewfinder, { backgroundColor: '#000' }]}>
           <View style={styles.center}>
             <ActivityIndicator color="#fff" />
             <AppText variant="subhead" color="#fff" style={{ marginTop: spacing.sm }}>
               カードを作成中…
             </AppText>
           </View>
-        ) : phase === 'idle' && hasCameraPermission && allowed ? (
-          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
-        ) : (
-          <View style={styles.center}>
-            <Ionicons name="scan-outline" size={64} color="rgba(255,255,255,0.5)" />
-            <AppText variant="footnote" color="rgba(255,255,255,0.7)" style={{ marginTop: spacing.md }}>
-              {allowed ? 'カメラの準備中…' : '今日の上限に達しました'}
-            </AppText>
-          </View>
-        )}
-      </View>
+        </View>
+      )}
 
-      {/* Idle controls */}
+      {/* Idle without camera ready (permission / limit) */}
       {phase === 'idle' && (
         <>
           {!allowed && (
@@ -204,30 +239,13 @@ export default function CaptureScreen() {
               />
             </View>
           )}
-
-          {allowed && hasCameraPermission && (
-            <View style={styles.shutterRow}>
-              <Pressable
-                onPress={pickFromLibrary}
-                style={[styles.sideButton, { backgroundColor: colors.secondarySystemGroupedBackground }]}
-              >
-                <Ionicons name="images-outline" size={24} color={colors.label} />
-              </Pressable>
-
-              <Pressable onPress={takePhoto} style={[styles.shutterOuter, { borderColor: colors.label }]}>
-                <View style={[styles.shutterInner, { backgroundColor: colors.label }]} />
-              </Pressable>
-
-              {/* Spacer to keep the shutter centered */}
-              <View style={styles.sideButton} />
-            </View>
-          )}
         </>
       )}
 
-      {/* Confirm: candidates with native translation */}
+      {/* Confirm: captured photo + candidates */}
       {phase === 'confirm' && (
         <View style={styles.confirm}>
+          <Image source={{ uri: shotPhoto }} style={styles.preview} contentFit="cover" />
           <AppText variant="headline" style={{ marginBottom: spacing.xs }}>これで合ってる？</AppText>
           <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginBottom: spacing.md }}>
             カードにする単語を選んでください
@@ -279,17 +297,34 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   quota: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.md },
   viewfinder: { height: 280, borderRadius: radius.lg, overflow: 'hidden' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  fill: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 200 },
   limit: { padding: spacing.lg, borderRadius: radius.lg, alignItems: 'center' },
-  shutterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
-  sideButton: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+
+  // Full-screen camera / scanner
+  fsRoot: { flex: 1, backgroundColor: '#000' },
+  fsTop: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  fsPill: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: 999,
+  },
+  fsControls: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.xxl,
+  },
+  fsSide: {
+    width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
   shutterOuter: {
-    width: 76, height: 76, borderRadius: 38, borderWidth: 4,
+    width: 78, height: 78, borderRadius: 39, borderWidth: 4, borderColor: '#fff',
     alignItems: 'center', justifyContent: 'center',
   },
-  shutterInner: { width: 60, height: 60, borderRadius: 30 },
+  shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#fff' },
+
+  // Confirm
   confirm: {},
+  preview: { width: '100%', height: 180, borderRadius: radius.lg, marginBottom: spacing.lg, backgroundColor: '#000' },
   candidate: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.sm,
