@@ -2,7 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { HIT_TARGET, radius, shadow, spacing, useColors } from '@/theme';
+import { HIT_TARGET, PRESS_OPACITY, PRESS_SCALE, radius, shadow, spacing, spring, useColors } from '@/theme';
 import { AppText } from './AppText';
 
 interface Props {
@@ -25,8 +25,8 @@ export function PrimaryButton({ title, onPress, variant = 'filled', loading, dis
 
   const pressed = useSharedValue(0);
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: withSpring(1 - pressed.value * 0.04, { damping: 15, stiffness: 350 }) }],
-    opacity: withTiming(disabled ? 0.4 : 1 - pressed.value * 0.12, { duration: 90 }),
+    transform: [{ scale: withSpring(1 - pressed.value * (1 - PRESS_SCALE), spring.snappy) }],
+    opacity: withTiming(disabled ? 0.4 : 1 - pressed.value * (1 - PRESS_OPACITY), { duration: 90 }),
   }));
 
   const handle = () => {

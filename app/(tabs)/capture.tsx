@@ -1,10 +1,8 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppStore';
@@ -12,11 +10,13 @@ import { services } from '@/services';
 import { canCapture, remainingCaptures } from '@/lib/quota';
 import { initialSrs } from '@/lib/srs';
 import { uploadImage } from '@/lib/storage';
+import { feedback } from '@/lib/feedback';
 import { radius, spacing, useColors } from '@/theme';
-import { AppText, GotchaOverlay, PrimaryButton, ScanOverlay } from '@/components';
+import { AppText, Icon, PrimaryButton, PressableScale, ScanOverlay, StickerRevealOverlay } from '@/components';
 import { IdentifyCandidate, VocabCard } from '@/types';
 
-type Phase = 'idle' | 'analyzing' | 'confirm' | 'building';
+type Phase = 'idle' | 'analyzing' | 'confirm' | 'revealing';
+interface Reveal { photo: string; sticker: string; word: string; reading?: string }
 
 export default function CaptureScreen() {
   const { profile, capturedToday, addCard, session } = useApp();
@@ -30,16 +30,20 @@ export default function CaptureScreen() {
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [candidates, setCandidates] = useState<IdentifyCandidate[]>([]);
-  const [shotPhoto, setShotPhoto] = useState('🍎');
+  const [shotPhoto, setShotPhoto] = useState('');
   const [shotBase64, setShotBase64] = useState<string | undefined>(undefined);
   const [manual, setManual] = useState('');
-  const [gotcha, setGotcha] = useState<{ sticker: string; word: string } | null>(null);
+  const [reveal, setReveal] = useState<Reveal | null>(null);
+
+  // Prefetched work so the post-confirm wait is hidden behind the reveal.
+  const cutoutRef = useRef<Promise<{ sticker: string }> | null>(null);
+  const photoUploadRef = useRef<Promise<string | null>>(Promise.resolve(null));
 
   const remaining = remainingCaptures(profile.plan, capturedToday);
   const allowed = canCapture(profile.plan, capturedToday);
   const hasCameraPermission = permission?.granted ?? false;
+  const userId = session?.user.id;
 
-  // Full-screen, chrome-free experience while the camera / scanner is up.
   const immersive = phase === 'analyzing' || (phase === 'idle' && hasCameraPermission && allowed);
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: !immersive });
@@ -47,13 +51,19 @@ export default function CaptureScreen() {
 
   const quotaText = profile.plan === 'pro' ? 'Pro · 撮り放題' : `今日あと ${remaining} 枚`;
 
-  /** Kick off the analyze → confirm pipeline for a captured photo. */
+  /** Capture → kick off identify (foreground) + cutout & photo upload (background). */
   const shoot = async (photo: string, imageBase64?: string) => {
     if (!allowed) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    feedback.capture();
     setShotPhoto(photo);
     setShotBase64(imageBase64);
     setPhase('analyzing');
+
+    // Prefetch the slow bits now (independent of the chosen word).
+    cutoutRef.current = services.cutout.cutout({ photo, imageBase64 }).catch(() => ({ sticker: photo }));
+    photoUploadRef.current =
+      userId && imageBase64 ? uploadImage(userId, imageBase64, 'photo', 'image/jpeg').catch(() => null) : Promise.resolve(null);
+
     try {
       const results = await services.identify.identify({
         photo,
@@ -64,7 +74,6 @@ export default function CaptureScreen() {
       setCandidates(results);
       setPhase('confirm');
     } catch {
-      // Identify failed (e.g. network/key issue) — fall back to manual entry.
       setCandidates([]);
       setPhase('confirm');
     }
@@ -82,44 +91,32 @@ export default function CaptureScreen() {
 
   const pickFromLibrary = async () => {
     if (!allowed) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.6,
-      base64: true,
-    });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6, base64: true });
     if (!result.canceled && result.assets[0]?.uri) {
       shoot(result.assets[0].uri, result.assets[0].base64 ?? undefined);
     }
   };
 
-  const confirm = async (c: IdentifyCandidate) => {
-    setPhase('building');
-    const [{ sticker }, fields] = await Promise.all([
-      services.cutout.cutout({ photo: shotPhoto, imageBase64: shotBase64 }),
+  /** Persist the card in the background; the reveal overlay masks the latency. */
+  const buildCard = async (c: IdentifyCandidate, sticker: string) => {
+    const [fields, photoUrl] = await Promise.all([
       services.enrich.enrich({ word: c.word, target: profile.targetLanguage, native: profile.nativeLanguage }),
+      photoUploadRef.current,
     ]);
-
-    // Persist images to Storage so the card survives restarts / syncs across
-    // devices. Falls back to the local URI/data on any failure.
-    let photoUrl = shotPhoto;
     let stickerUrl = sticker;
-    const userId = session?.user.id;
-    if (userId && shotBase64) {
+    if (userId) {
       try {
-        photoUrl = await uploadImage(userId, shotBase64, 'photo', 'image/jpeg');
         stickerUrl = sticker.startsWith('data:')
           ? await uploadImage(userId, sticker, 'sticker', 'image/png')
-          : photoUrl; // no cut-out → reuse the photo
+          : photoUrl ?? sticker;
       } catch {
-        photoUrl = shotPhoto;
-        stickerUrl = sticker;
+        stickerUrl = photoUrl ?? sticker;
       }
     }
-
     const card: VocabCard = {
       id: `c_${Date.now()}`,
       sticker: stickerUrl,
-      photo: photoUrl,
+      photo: photoUrl ?? shotPhoto,
       targetLanguage: profile.targetLanguage,
       word: c.word,
       categoryId: c.categoryId,
@@ -130,15 +127,24 @@ export default function CaptureScreen() {
       capturedAt: new Date().toISOString(),
     };
     await addCard(card);
-    setGotcha({ sticker: stickerUrl, word: c.word });
-    reset();
+  };
+
+  const confirm = async (c: IdentifyCandidate) => {
+    feedback.tap();
+    // Show the reveal immediately (sticker upgrades to the cut-out when ready).
+    setReveal({ photo: shotPhoto, sticker: shotPhoto, word: c.word, reading: c.reading });
+    setPhase('revealing');
+    const cut = await cutoutRef.current;
+    const sticker = cut?.sticker ?? shotPhoto;
+    if (sticker !== shotPhoto) setReveal((r) => (r ? { ...r, sticker } : r));
+    buildCard(c, sticker);
   };
 
   const confirmManual = () => {
     const word = manual.trim();
     if (!word) return;
-    confirm({ word, reading: '', nativeTranslation: '', emoji: shotPhoto, categoryId: 'object', confidence: 1 });
     setManual('');
+    confirm({ word, reading: '', nativeTranslation: '', emoji: '', categoryId: 'object', confidence: 1 });
   };
 
   const reset = () => {
@@ -159,23 +165,21 @@ export default function CaptureScreen() {
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
         )}
 
-        {/* Quota pill */}
         <View style={[styles.fsTop, { top: insets.top + spacing.sm }]} pointerEvents="none">
           <View style={styles.fsPill}>
-            <Ionicons name="flash-outline" size={15} color="#FFD60A" />
+            <Icon name="flash-outline" size={15} color="#FFD60A" />
             <AppText variant="footnote" color="#fff">{quotaText}</AppText>
           </View>
         </View>
 
-        {/* Shutter controls (camera only) */}
         {phase === 'idle' && (
           <View style={[styles.fsControls, { paddingBottom: insets.bottom + spacing.xxl }]}>
-            <Pressable onPress={pickFromLibrary} style={styles.fsSide}>
-              <Ionicons name="images-outline" size={26} color="#fff" />
-            </Pressable>
-            <Pressable onPress={takePhoto} style={styles.shutterOuter}>
+            <PressableScale onPress={pickFromLibrary} style={styles.fsSide}>
+              <Icon name="images-outline" size={26} color="#fff" />
+            </PressableScale>
+            <PressableScale onPress={takePhoto} haptic={false} style={styles.shutterOuter}>
               <View style={styles.shutterInner} />
-            </Pressable>
+            </PressableScale>
             <View style={styles.fsSide} />
           </View>
         )}
@@ -183,7 +187,7 @@ export default function CaptureScreen() {
     );
   }
 
-  // ── Result / setup states (scrollable) ───────────────────────────────────
+  // ── Setup / confirm (scrollable) ─────────────────────────────────────────
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
@@ -192,80 +196,59 @@ export default function CaptureScreen() {
     >
       {/* Quota banner */}
       <View style={[styles.quota, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-        <Ionicons name="flash-outline" size={18} color={colors.orange} />
+        <Icon name="flash-outline" size={18} color={colors.orange} />
         <AppText variant="subhead" color={colors.secondaryLabel} style={{ flex: 1 }}>
           {profile.plan === 'pro' ? 'Pro · 撮り放題' : `今日あと ${remaining} 枚（無料プラン）`}
         </AppText>
         {profile.plan === 'free' && <AppText variant="subhead" color={colors.blue}>Proにする</AppText>}
       </View>
 
-      {/* Building card */}
-      {phase === 'building' && (
-        <View style={[styles.viewfinder, { backgroundColor: '#000' }]}>
-          <View style={styles.center}>
-            <ActivityIndicator color="#fff" />
-            <AppText variant="subhead" color="#fff" style={{ marginTop: spacing.sm }}>
-              カードを作成中…
-            </AppText>
-          </View>
+      {phase === 'idle' && !allowed && (
+        <View style={[styles.limit, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
+          <AppText variant="headline">今日の上限に達しました</AppText>
+          <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginVertical: spacing.sm }}>
+            Proにアップグレードすると無制限に撮れます。
+          </AppText>
+          <PrimaryButton title="Proにアップグレード" onPress={() => {}} />
         </View>
       )}
 
-      {/* Idle without camera ready (permission / limit) */}
-      {phase === 'idle' && (
-        <>
-          {!allowed && (
-            <View style={[styles.limit, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-              <AppText variant="headline">今日の上限に達しました</AppText>
-              <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginVertical: spacing.sm }}>
-                Proにアップグレードすると無制限に撮れます。
-              </AppText>
-              <PrimaryButton title="Proにアップグレード" onPress={() => {}} />
-            </View>
-          )}
-
-          {allowed && !hasCameraPermission && (
-            <View style={[styles.limit, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-              <AppText variant="headline">カメラを使う準備</AppText>
-              <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginVertical: spacing.sm }}>
-                被写体を撮ってカードにするために、カメラの使用を許可してください。
-              </AppText>
-              <PrimaryButton title="カメラを許可する" onPress={requestPermission} />
-              <PrimaryButton
-                title="ライブラリから選ぶ"
-                onPress={pickFromLibrary}
-                variant="plain"
-                style={{ marginTop: spacing.sm }}
-              />
-            </View>
-          )}
-        </>
+      {phase === 'idle' && allowed && !hasCameraPermission && (
+        <View style={[styles.limit, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
+          <AppText variant="headline">カメラを使う準備</AppText>
+          <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginVertical: spacing.sm }}>
+            被写体を撮ってカードにするために、カメラの使用を許可してください。
+          </AppText>
+          <PrimaryButton title="カメラを許可する" onPress={requestPermission} />
+          <PrimaryButton title="ライブラリから選ぶ" onPress={pickFromLibrary} variant="plain" style={{ marginTop: spacing.sm }} />
+        </View>
       )}
 
       {/* Confirm: captured photo + candidates */}
       {phase === 'confirm' && (
-        <View style={styles.confirm}>
+        <View>
           <Image source={{ uri: shotPhoto }} style={styles.preview} contentFit="cover" />
-          <AppText variant="headline" style={{ marginBottom: spacing.xs }}>これで合ってる？</AppText>
-          <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginBottom: spacing.md }}>
+          <AppText variant="title3" style={{ marginBottom: spacing.xs }}>これで合ってる？</AppText>
+          <AppText variant="subhead" color={colors.secondaryLabel} style={{ marginBottom: spacing.md }}>
             カードにする単語を選んでください
           </AppText>
           {candidates.map((c, i) => (
-            <Pressable
+            <PressableScale
               key={`${c.word}-${i}`}
               onPress={() => confirm(c)}
               style={[styles.candidate, { backgroundColor: colors.secondarySystemGroupedBackground }]}
             >
-              <AppText style={{ fontSize: 30 }}>{c.emoji}</AppText>
               <View style={{ flex: 1 }}>
-                <AppText variant="headline">{c.word} <AppText variant="subhead" color={colors.secondaryLabel}>{c.reading}</AppText></AppText>
+                <AppText variant="headline">
+                  {c.word} <AppText variant="subhead" color={colors.secondaryLabel}>{c.reading}</AppText>
+                </AppText>
                 <AppText variant="footnote" color={colors.secondaryLabel}>{c.nativeTranslation || '（母語訳）'}</AppText>
               </View>
               <AppText variant="caption1" color={colors.tertiaryLabel}>{Math.round(c.confidence * 100)}%</AppText>
-            </Pressable>
+              <Icon name="chevron-forward" size={18} color={colors.tertiaryLabel} />
+            </PressableScale>
           ))}
 
-          {/* Manual fallback */}
           <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginTop: spacing.lg, marginBottom: spacing.xs }}>
             候補にない場合は手動入力
           </AppText>
@@ -283,11 +266,16 @@ export default function CaptureScreen() {
         </View>
       )}
 
-      <GotchaOverlay
-        visible={!!gotcha}
-        emoji={gotcha?.sticker ?? '🍎'}
-        word={gotcha?.word ?? ''}
-        onDone={() => setGotcha(null)}
+      <StickerRevealOverlay
+        visible={!!reveal}
+        photo={reveal?.photo ?? ''}
+        sticker={reveal?.sticker}
+        word={reveal?.word ?? ''}
+        reading={reveal?.reading}
+        onDone={() => {
+          setReveal(null);
+          reset();
+        }}
       />
     </ScrollView>
   );
@@ -296,8 +284,6 @@ export default function CaptureScreen() {
 const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   quota: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.md },
-  viewfinder: { height: 280, borderRadius: radius.lg, overflow: 'hidden' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 200 },
   limit: { padding: spacing.lg, borderRadius: radius.lg, alignItems: 'center' },
 
   // Full-screen camera / scanner
@@ -309,25 +295,17 @@ const styles = StyleSheet.create({
   },
   fsControls: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.xxl,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xxl,
   },
-  fsSide: {
-    width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  shutterOuter: {
-    width: 78, height: 78, borderRadius: 39, borderWidth: 4, borderColor: '#fff',
-    alignItems: 'center', justifyContent: 'center',
-  },
+  fsSide: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)' },
+  shutterOuter: { width: 78, height: 78, borderRadius: 39, borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#fff' },
 
   // Confirm
-  confirm: {},
-  preview: { width: '100%', height: 180, borderRadius: radius.lg, marginBottom: spacing.lg, backgroundColor: '#000' },
+  preview: { width: '100%', height: 200, borderRadius: radius.lg, marginBottom: spacing.lg, backgroundColor: '#000' },
   candidate: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.sm,
+    padding: spacing.lg, borderRadius: radius.md, marginBottom: spacing.sm, minHeight: 44,
   },
   manualRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   input: { flex: 1, height: 44, borderRadius: radius.md, paddingHorizontal: spacing.md, fontSize: 17 },

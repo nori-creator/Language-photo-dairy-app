@@ -24,29 +24,41 @@ export const radius = {
 export const HIT_TARGET = 44;
 
 /**
- * Soft, layered iOS-style shadows. Subtle by design — depth without grime.
- * Use via spread: `style={[styles.card, shadow.sm]}`.
+ * Soft, layered iOS-style shadows — faint and low, never dark/hard (per HIG).
+ * Tuned to the Liquid Glass spec presets. Use via spread: `[styles.card, shadow.card]`.
+ *
+ * `sm`/`md`/`lg` are kept as aliases so existing call-sites stay valid.
  */
 export const shadow = {
-  sm: {
+  card: {
     shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
     elevation: 2,
   },
-  md: {
+  popover: {
     shadowColor: '#000',
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.12,
     shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
-  lg: {
+  modal: {
     shadowColor: '#000',
     shadowOpacity: 0.16,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 10,
+    shadowRadius: 32,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
   },
+  fab: {
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  get sm() { return this.card; },
+  get md() { return this.popover; },
+  get lg() { return this.modal; },
 } as const;
