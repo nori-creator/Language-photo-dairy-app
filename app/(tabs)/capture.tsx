@@ -9,7 +9,7 @@ import { services } from '@/services';
 import { canCapture, remainingCaptures } from '@/lib/quota';
 import { initialSrs } from '@/lib/srs';
 import { radius, spacing, useColors } from '@/theme';
-import { AppText, GotchaOverlay, PrimaryButton, Sticker } from '@/components';
+import { AppText, GotchaOverlay, PrimaryButton, ScanOverlay, Sticker } from '@/components';
 import { IdentifyCandidate, VocabCard } from '@/types';
 
 type Phase = 'idle' | 'analyzing' | 'confirm' | 'building';
@@ -122,12 +122,9 @@ export default function CaptureScreen() {
       {/* Viewfinder */}
       <View style={[styles.viewfinder, { backgroundColor: '#000' }]}>
         {phase === 'analyzing' ? (
-          <View style={styles.center}>
-            <Sticker emoji={shotPhoto} size={120} />
-            <ActivityIndicator color="#fff" style={{ marginTop: spacing.lg }} />
-            <AppText variant="subhead" color="#fff" style={{ marginTop: spacing.sm }}>
-              AIが分析中…
-            </AppText>
+          <View style={styles.fill}>
+            <Sticker emoji={shotPhoto} size={280} />
+            <ScanOverlay height={280} />
           </View>
         ) : phase === 'building' ? (
           <View style={styles.center}>
@@ -252,6 +249,7 @@ const styles = StyleSheet.create({
   quota: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.md },
   viewfinder: { height: 280, borderRadius: radius.lg, overflow: 'hidden' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  fill: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   limit: { padding: spacing.lg, borderRadius: radius.lg, alignItems: 'center' },
   shutterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
   sideButton: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
