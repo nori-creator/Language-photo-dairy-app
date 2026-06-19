@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/store/AppStore';
 import { CATEGORIES } from '@/data/categories';
+import { categoryIcon } from '@/lib/categoryIcon';
 import { blurAmount } from '@/lib/srs';
 import { radius, spacing, useColors } from '@/theme';
-import { AppText, Sticker } from '@/components';
+import { AppText, Card, Icon, PressableScale, ProgressBar, Sticker } from '@/components';
 import { VocabCard } from '@/types';
 
 export default function DexScreen() {
@@ -28,46 +29,54 @@ export default function DexScreen() {
       style={{ backgroundColor: colors.systemGroupedBackground }}
       contentContainerStyle={styles.content}
     >
-      <AppText variant="footnote" color={colors.secondaryLabel} style={styles.summary}>
-        コレクション {total} / {goal} 種
-      </AppText>
+      {/* Collection summary */}
+      <Card>
+        <View style={styles.summaryRow}>
+          <AppText variant="headline">コレクション</AppText>
+          <AppText variant="subhead" color={colors.secondaryLabel}>{total} / {goal} 種</AppText>
+        </View>
+        <ProgressBar progress={goal ? total / goal : 0} style={{ marginTop: spacing.md }} />
+      </Card>
 
       {CATEGORIES.map((cat) => {
         const owned = byCategory.get(cat.id) ?? [];
         const ownedWords = new Set(owned.map((c) => c.word));
         const locked = (cat.targetWords ?? []).filter((w) => !ownedWords.has(w));
+        const count = cat.targetWords?.length ?? owned.length;
         return (
-          <View key={cat.id} style={[styles.section, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
+          <Card key={cat.id}>
             <View style={styles.sectionHeader}>
-              <AppText variant="title3">{cat.emoji}  {cat.name}</AppText>
-              <AppText variant="footnote" color={colors.secondaryLabel}>
-                {owned.length}/{(cat.targetWords?.length ?? owned.length)}
-              </AppText>
+              <View style={styles.headerLeft}>
+                <Icon name={categoryIcon(cat.id)} size={20} color={colors.label} />
+                <AppText variant="title3">{cat.name}</AppText>
+              </View>
+              <AppText variant="subhead" color={colors.secondaryLabel}>{owned.length}/{count}</AppText>
             </View>
             <View style={styles.grid}>
               {owned.map((c) => (
-                <Pressable key={c.id} onPress={() => router.push(`/card/${c.id}`)} style={styles.slot}>
+                <PressableScale key={c.id} onPress={() => router.push(`/card/${c.id}`)} style={styles.slot}>
                   <View style={[styles.slotInner, { backgroundColor: colors.tertiarySystemBackground }]}>
-                    <Sticker emoji={c.sticker} size={48} blur={blurAmount(c.srs)} />
+                    <Sticker emoji={c.sticker} size={56} blur={blurAmount(c.srs)} />
                   </View>
                   <AppText variant="caption2" numberOfLines={1}>{c.word}</AppText>
-                </Pressable>
+                </PressableScale>
               ))}
               {locked.map((w) => (
                 <View key={w} style={styles.slot}>
-                  <View style={[styles.slotInner, styles.locked, { borderColor: colors.separator }]}>
-                    <AppText variant="title2" color={colors.quaternaryLabel}>?</AppText>
+                  <View style={[styles.slotInner, { backgroundColor: colors.fill }]}>
+                    <Icon name="help" size={22} color={colors.quaternaryLabel} />
                   </View>
                   <AppText variant="caption2" color={colors.tertiaryLabel} numberOfLines={1}>未取得</AppText>
                 </View>
               ))}
             </View>
             {locked.length > 0 && (
-              <AppText variant="caption1" color={colors.blue} style={styles.nudge}>
-                外に出て「？」の単語を撮って集めよう
-              </AppText>
+              <View style={styles.nudge}>
+                <Icon name="sparkles-outline" size={14} color={colors.blue} />
+                <AppText variant="caption1" color={colors.blue}>外に出て「？」の単語を撮って集めよう</AppText>
+              </View>
             )}
-          </View>
+          </Card>
         );
       })}
     </ScrollView>
@@ -76,12 +85,11 @@ export default function DexScreen() {
 
 const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
-  summary: { marginLeft: spacing.xs },
-  section: { borderRadius: radius.lg, padding: spacing.lg },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  slot: { width: 64, alignItems: 'center', gap: spacing.xs },
-  slotInner: { width: 64, height: 64, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  locked: { borderWidth: StyleSheet.hairlineWidth * 3, borderStyle: 'dashed', backgroundColor: 'transparent' },
-  nudge: { marginTop: spacing.md },
+  slot: { width: 68, alignItems: 'center', gap: spacing.xs },
+  slotInner: { width: 68, height: 68, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  nudge: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.md },
 });

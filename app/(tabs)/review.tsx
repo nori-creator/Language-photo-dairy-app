@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useApp } from '@/store/AppStore';
 import { Recall, blurAmount, isDue } from '@/lib/srs';
+import { feedback } from '@/lib/feedback';
 import { radius, spacing, useColors } from '@/theme';
-import { AppText, PrimaryButton, Sticker } from '@/components';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { AppText, Card, Icon, PressableScale, PrimaryButton, Sticker } from '@/components';
 
 const RECALLS: { key: Recall; label: string; tint: keyof ReturnType<typeof useColors> }[] = [
   { key: 'forgot', label: '忘れた', tint: 'red' },
@@ -16,6 +18,7 @@ const RECALLS: { key: Recall; label: string; tint: keyof ReturnType<typeof useCo
 export default function ReviewScreen() {
   const { cards, reviewCard } = useApp();
   const colors = useColors();
+  const reduced = useReducedMotion();
   const [revealed, setRevealed] = useState(false);
 
   const due = useMemo(() => cards.filter((c) => isDue(c.srs)), [cards]);
@@ -24,7 +27,7 @@ export default function ReviewScreen() {
   if (!current) {
     return (
       <View style={[styles.empty, { backgroundColor: colors.systemGroupedBackground }]}>
-        <Ionicons name="checkmark-circle" size={56} color={colors.green} />
+        <Icon name="checkmark-circle" size={56} color={colors.green} />
         <AppText variant="title3" style={{ marginTop: spacing.md }}>今日の復習は完了！</AppText>
         <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginTop: spacing.xs }}>
           また単語を撮って図鑑を増やそう
@@ -33,7 +36,13 @@ export default function ReviewScreen() {
     );
   }
 
+  const reveal = () => {
+    feedback.tap();
+    setRevealed(true);
+  };
   const onRate = (r: Recall) => {
+    if (r === 'good' || r === 'easy') feedback.success();
+    else feedback.tap();
     reviewCard(current.id, r);
     setRevealed(false);
   };
@@ -46,22 +55,23 @@ export default function ReviewScreen() {
       style={{ backgroundColor: colors.systemGroupedBackground }}
       contentContainerStyle={styles.content}
     >
-      <AppText variant="footnote" color={colors.secondaryLabel}>
-        のこり {due.length} 枚 · まだ覚えてる？
-      </AppText>
+      <AppText variant="subhead" color={colors.secondaryLabel}>のこり {due.length} 枚 · まだ覚えてる？</AppText>
 
-      <View style={[styles.card, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
-        <Sticker emoji={current.sticker} size={150} blur={blur} />
-        <AppText variant="largeTitle" style={{ marginTop: spacing.md }}>{current.word}</AppText>
+      <Card style={styles.card}>
+        <View style={[styles.platform, { backgroundColor: colors.fill }]}>
+          <Sticker emoji={current.sticker} size={150} blur={blur} />
+        </View>
+        <AppText variant="largeTitle" style={{ marginTop: spacing.lg }}>{current.word}</AppText>
 
         {current.srs.lapses >= 2 && (
-          <AppText variant="caption1" color={colors.red} style={{ marginTop: spacing.xs }}>
-            ⚠️ 何度も忘れています。写真が薄れてきました…
-          </AppText>
+          <View style={styles.warn}>
+            <Icon name="alert-circle" size={14} color={colors.red} />
+            <AppText variant="caption1" color={colors.red}>何度も忘れています。写真が薄れてきました</AppText>
+          </View>
         )}
 
         {revealed ? (
-          <View style={styles.answer}>
+          <Animated.View entering={reduced ? undefined : FadeIn.duration(260)} style={styles.answer}>
             <AppText variant="title3" color={colors.secondaryLabel}>{current.reading}</AppText>
             <AppText variant="body" style={{ marginTop: spacing.sm, textAlign: 'center' }}>{current.meaning}</AppText>
             {current.examples[0] && (
@@ -69,24 +79,28 @@ export default function ReviewScreen() {
                 {current.examples[0].text}
               </AppText>
             )}
-          </View>
+          </Animated.View>
         ) : (
-          <PrimaryButton title="答えを見る" onPress={() => setRevealed(true)} variant="tinted" style={{ marginTop: spacing.xl }} />
+          <PrimaryButton title="答えを見る" onPress={reveal} variant="tinted" style={{ marginTop: spacing.xl }} />
         )}
-      </View>
+      </Card>
 
       {revealed && (
-        <View style={styles.ratings}>
-          {RECALLS.map((r) => (
-            <PrimaryButton
-              key={r.key}
-              title={r.label}
-              onPress={() => onRate(r.key)}
-              variant="tinted"
-              style={[styles.rateBtn, { backgroundColor: (colors[r.tint] as string) + '22' }]}
-            />
-          ))}
-        </View>
+        <Animated.View entering={reduced ? undefined : FadeIn.duration(260)} style={styles.ratings}>
+          {RECALLS.map((r) => {
+            const tint = colors[r.tint] as string;
+            return (
+              <PressableScale
+                key={r.key}
+                onPress={() => onRate(r.key)}
+                haptic={false}
+                style={[styles.rateBtn, { backgroundColor: tint + '1F' }]}
+              >
+                <AppText variant="headline" color={tint}>{r.label}</AppText>
+              </PressableScale>
+            );
+          })}
+        </Animated.View>
       )}
     </ScrollView>
   );
@@ -95,8 +109,10 @@ export default function ReviewScreen() {
 const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  card: { borderRadius: radius.lg, padding: spacing.xl, alignItems: 'center' },
+  card: { alignItems: 'center', paddingVertical: spacing.xl },
+  platform: { width: 180, height: 180, borderRadius: radius.xl, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  warn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
   answer: { alignItems: 'center', marginTop: spacing.lg },
   ratings: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'space-between' },
-  rateBtn: { flexGrow: 1, flexBasis: '47%' },
+  rateBtn: { flexGrow: 1, flexBasis: '47%', minHeight: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
 });

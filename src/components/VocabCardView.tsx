@@ -2,23 +2,24 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { VocabCard } from '@/types';
 import { radius, shadow, spacing, useColors } from '@/theme';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { blurAmount } from '@/lib/srs';
 import { services } from '@/services';
 import { AppText } from './AppText';
 import { Sticker } from './Sticker';
 
-/** A Pokémon-style collectible card: tap to flip and reveal the full entry. */
+/** A collectible card: tap to flip and reveal the full entry. */
 export function VocabCardView({ card }: { card: VocabCard }) {
   const colors = useColors();
+  const reduced = useReducedMotion();
   const spin = useSharedValue(0);
 
   const flip = () => {
     Haptics.selectionAsync().catch(() => {});
-    spin.value = withTiming(spin.value === 0 ? 1 : 0, { duration: 450 });
+    spin.value = withTiming(spin.value === 0 ? 1 : 0, { duration: reduced ? 0 : 450 });
   };
 
   const frontStyle = useAnimatedStyle(() => ({
@@ -41,13 +42,7 @@ export function VocabCardView({ card }: { card: VocabCard }) {
     <Pressable onPress={flip}>
       <View style={styles.stage}>
         {/* FRONT */}
-        <Animated.View style={[styles.face, surface, shadow.lg, frontStyle]}>
-          <LinearGradient
-            colors={[colors.fill, 'transparent']}
-            style={styles.spotlight}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-          />
+        <Animated.View style={[styles.face, surface, shadow.popover, frontStyle]}>
           <View style={[styles.platform, { backgroundColor: colors.fill }]}>
             <Sticker emoji={card.sticker} size={140} blur={blurAmount(card.srs)} />
           </View>
@@ -62,7 +57,7 @@ export function VocabCardView({ card }: { card: VocabCard }) {
         </Animated.View>
 
         {/* BACK */}
-        <Animated.View style={[styles.face, styles.back, surface, shadow.lg, backStyle]}>
+        <Animated.View style={[styles.face, styles.back, surface, shadow.popover, backStyle]}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.backContent}>
             <View style={styles.headerRow}>
               <View style={{ flex: 1 }}>
@@ -123,7 +118,7 @@ function Field({ label, colors, children }: { label: string; colors: ReturnType<
   return (
     <View style={{ marginTop: spacing.lg }}>
       <AppText variant="footnote" color={colors.secondaryLabel} style={styles.fieldLabel}>
-        {label.toUpperCase()}
+        {label}
       </AppText>
       {children}
     </View>
@@ -144,7 +139,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  spotlight: { position: 'absolute', top: 0, left: 0, right: 0, height: '60%', opacity: 0.7 },
   platform: {
     width: 180,
     height: 180,

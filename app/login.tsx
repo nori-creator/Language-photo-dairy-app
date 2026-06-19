@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from 'rea
 import { supabase } from '@/lib/supabase';
 import { hasAiBackend } from '@/config';
 import { radius, spacing, useColors } from '@/theme';
-import { AppText, PrimaryButton } from '@/components';
+import { AppText, Icon, PrimaryButton } from '@/components';
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -44,16 +44,15 @@ export default function LoginScreen() {
       style={[styles.flex, { backgroundColor: colors.systemGroupedBackground }]}
     >
       <View style={styles.content}>
-        <AppText variant="largeTitle" style={styles.title}>Lexilog</AppText>
-        <AppText variant="subhead" color={colors.secondaryLabel} style={styles.tagline}>
+        <AppText variant="largeTitle">Lexilog</AppText>
+        <AppText variant="body" color={colors.secondaryLabel} style={styles.tagline}>
           撮るだけで、ことばが集まる。
         </AppText>
 
         {!hasAiBackend && (
           <View style={[styles.warn, { backgroundColor: colors.fill }]}>
-            <AppText variant="footnote" color={colors.secondaryLabel}>
-              ⚠️ Supabase未設定です（.env を確認）。
-            </AppText>
+            <Icon name="alert-circle-outline" size={16} color={colors.secondaryLabel} />
+            <AppText variant="footnote" color={colors.secondaryLabel}>Supabase未設定です（.env を確認）</AppText>
           </View>
         )}
 
@@ -105,9 +104,8 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
-  title: { textAlign: 'center' },
-  tagline: { textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.xxl },
-  warn: { padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.lg, alignItems: 'center' },
+  tagline: { marginTop: spacing.xs, marginBottom: spacing.xxl },
+  warn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.lg },
   form: { gap: spacing.sm },
   input: { height: 50, borderRadius: radius.md, paddingHorizontal: spacing.lg, fontSize: 17 },
 });
