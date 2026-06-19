@@ -1,6 +1,6 @@
 import { hasAiBackend } from '@/config';
 import { mockCutout, mockEnrich, mockIdentify, mockTts } from './mock';
-import { geminiEnrich, geminiIdentify } from './gemini';
+import { geminiCutout, geminiEnrich, geminiIdentify } from './gemini';
 import { CutoutService, EnrichService, IdentifyService, TtsService } from './types';
 
 /**
@@ -10,8 +10,9 @@ import { CutoutService, EnrichService, IdentifyService, TtsService } from './typ
  *   identify + enrich services hit the real Gemini-backed Edge Function.
  * - Otherwise everything runs on the offline mocks (no keys needed).
  *
- * Cutout (background removal) and TTS stay mocked for now: the captured photo
- * is used as-is for the card, and pronunciation audio is a later phase.
+ * Cutout uses remove.bg via the Edge Function when REMOVEBG_API_KEY is set
+ * server-side (otherwise it gracefully falls back to the raw photo). TTS stays
+ * mocked for now (pronunciation audio is a later phase).
  */
 export const services: {
   identify: IdentifyService;
@@ -20,7 +21,7 @@ export const services: {
   tts: TtsService;
 } = {
   identify: hasAiBackend ? geminiIdentify : mockIdentify,
-  cutout: mockCutout,
+  cutout: hasAiBackend ? geminiCutout : mockCutout,
   enrich: hasAiBackend ? geminiEnrich : mockEnrich,
   tts: mockTts,
 };

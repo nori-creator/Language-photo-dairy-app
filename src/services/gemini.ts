@@ -1,6 +1,6 @@
 import { config } from '@/config';
 import { IdentifyCandidate } from '@/types';
-import { EnrichService, EnrichedFields, IdentifyService } from './types';
+import { CutoutService, EnrichService, EnrichedFields, IdentifyService } from './types';
 
 /**
  * Real implementations backed by the Supabase Edge Function "ai", which holds
@@ -48,6 +48,20 @@ const EMPTY_FIELDS: EnrichedFields = {
   antonyms: [],
   etymology: '',
   note: '',
+};
+
+export const geminiCutout: CutoutService = {
+  async cutout({ photo, imageBase64 }) {
+    // No base64 (e.g. came from a source we couldn't encode) → keep the photo.
+    if (!imageBase64) return { sticker: photo };
+    try {
+      const { pngBase64 } = await callBackend<{ pngBase64?: string }>('cutout', { imageBase64 });
+      return { sticker: pngBase64 ? `data:image/png;base64,${pngBase64}` : photo };
+    } catch {
+      // remove.bg not configured / failed — gracefully fall back to the photo.
+      return { sticker: photo };
+    }
+  },
 };
 
 export const geminiEnrich: EnrichService = {

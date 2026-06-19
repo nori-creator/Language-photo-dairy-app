@@ -2,9 +2,10 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { VocabCard } from '@/types';
-import { radius, spacing, useColors } from '@/theme';
+import { radius, shadow, spacing, useColors } from '@/theme';
 import { blurAmount } from '@/lib/srs';
 import { services } from '@/services';
 import { AppText } from './AppText';
@@ -40,8 +41,16 @@ export function VocabCardView({ card }: { card: VocabCard }) {
     <Pressable onPress={flip}>
       <View style={styles.stage}>
         {/* FRONT */}
-        <Animated.View style={[styles.face, surface, frontStyle]}>
-          <Sticker emoji={card.sticker} size={140} blur={blurAmount(card.srs)} />
+        <Animated.View style={[styles.face, surface, shadow.lg, frontStyle]}>
+          <LinearGradient
+            colors={[colors.fill, 'transparent']}
+            style={styles.spotlight}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+          />
+          <View style={[styles.platform, { backgroundColor: colors.fill }]}>
+            <Sticker emoji={card.sticker} size={140} blur={blurAmount(card.srs)} />
+          </View>
           <AppText variant="largeTitle">{card.word}</AppText>
           <AppText variant="headline" color={colors.secondaryLabel}>{card.reading}</AppText>
           <View style={[styles.levelPill, { backgroundColor: colors.fill }]}>
@@ -53,7 +62,7 @@ export function VocabCardView({ card }: { card: VocabCard }) {
         </Animated.View>
 
         {/* BACK */}
-        <Animated.View style={[styles.face, styles.back, surface, backStyle]}>
+        <Animated.View style={[styles.face, styles.back, surface, shadow.lg, backStyle]}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.backContent}>
             <View style={styles.headerRow}>
               <View style={{ flex: 1 }}>
@@ -129,15 +138,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: '100%',
     height: CARD_HEIGHT,
-    borderRadius: radius.card,
+    borderRadius: radius.xxl,
     padding: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    overflow: 'hidden',
+  },
+  spotlight: { position: 'absolute', top: 0, left: 0, right: 0, height: '60%', opacity: 0.7 },
+  platform: {
+    width: 180,
+    height: 180,
+    borderRadius: radius.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   back: { alignItems: 'stretch', justifyContent: 'flex-start' },
   backContent: { paddingVertical: spacing.xs },

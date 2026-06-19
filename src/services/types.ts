@@ -22,7 +22,7 @@ export interface IdentifyService {
 
 export interface CutoutService {
   /** Remove the background, returning a sticker-style cut-out of the subject. */
-  cutout(input: { photo: string }): Promise<{ sticker: string }>;
+  cutout(input: { photo: string; imageBase64?: string }): Promise<{ sticker: string }>;
 }
 
 export type EnrichedFields = Pick<

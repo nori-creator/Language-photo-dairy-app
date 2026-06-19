@@ -24,6 +24,7 @@ export default function CaptureScreen() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [candidates, setCandidates] = useState<IdentifyCandidate[]>([]);
   const [shotPhoto, setShotPhoto] = useState('🍎');
+  const [shotBase64, setShotBase64] = useState<string | undefined>(undefined);
   const [manual, setManual] = useState('');
   const [gotcha, setGotcha] = useState<{ sticker: string; word: string } | null>(null);
 
@@ -35,6 +36,7 @@ export default function CaptureScreen() {
     if (!allowed) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setShotPhoto(photo);
+    setShotBase64(imageBase64);
     setPhase('analyzing');
     try {
       const results = await services.identify.identify({
@@ -77,7 +79,7 @@ export default function CaptureScreen() {
   const confirm = async (c: IdentifyCandidate) => {
     setPhase('building');
     const [{ sticker }, fields] = await Promise.all([
-      services.cutout.cutout({ photo: shotPhoto }),
+      services.cutout.cutout({ photo: shotPhoto, imageBase64: shotBase64 }),
       services.enrich.enrich({ word: c.word, target: profile.targetLanguage, native: profile.nativeLanguage }),
     ]);
     const card: VocabCard = {
