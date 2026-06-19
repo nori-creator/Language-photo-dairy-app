@@ -29,10 +29,11 @@
 
 - **アプリ**: React Native + **Expo**（TypeScript / expo-router）— 1コードで iOS/Android、**Mac なしで iOS ビルド可**。
 - **デザイン**: Apple HIG 準拠の自前デザインシステム（`src/theme`：SFタイプランプ＋iOSシステムカラー、ライト/ダーク対応）。
-- **バックエンド（予定）**: Supabase（Auth / Postgres / Storage / Edge Functions）。スキーマは `supabase/migrations/0001_init.sql`。
-- **外部API（予定・Edge Function経由）**: 切り抜き（BiRefNet等）/ Claude（識別・enrich）/ Google・Azure TTS（発音）。
+- **バックエンド**: Supabase（Auth / Postgres / Storage / **Edge Functions**）。スキーマは `supabase/migrations/0001_init.sql`、AI関数は `supabase/functions/ai/`。
+- **外部AI**: **Google Gemini**（写真→単語の識別・意味/例文の生成）を Edge Function 経由で呼び出し。切り抜き・TTSは次フェーズ。
 
-> 現状、外部APIはすべて **`src/services/mock.ts` のモック**に接続。**APIキー不要でフル機能が動きます**。
+> AI接続が未設定の間は **`src/services/mock.ts` のモック**に自動フォールバック。**APIキー不要でフル機能が動きます**。
+> `.env` に Supabase の値を入れると `src/services/index.ts` が実Gemini接続へ自動切替（`src/config.ts`）。
 
 ## ディレクトリ構成
 
@@ -63,16 +64,35 @@ npm test             # SRS/streak/quota のユニットテスト
 npm run typecheck    # 型チェック
 ```
 
-開発機は Windows / Android / iPad で完結します（モックのため実機カメラやキー不要）。
-Capture 画面はデモ用に被写体（🍎🐶☕🚏）をタップして撮影フローを再現します。
+開発機は Windows / Android / iPad で完結します。Capture 画面は **実機カメラ**で撮影でき、
+「ライブラリから選ぶ」にも対応。AI接続が未設定でも、撮影フロー自体はモックで最後まで動きます。
 
-## 実APIへの差し替え（キー取得後）
+## 実AI接続の手順（Google Gemini × Supabase）
 
-1. Supabase プロジェクト作成 → `supabase/migrations/0001_init.sql` を適用。
-2. Edge Functions（`identify` / `cutout` / `enrich` / `tts`）をデプロイし、各APIキーを Function のシークレットに設定。
-3. `src/services/index.ts` のバインディングをモックから実クライアントに差し替え。
+APIキーは**アプリに埋め込まず**、Supabase Edge Function のシークレットに置きます。アプリは公開しても
+安全な Supabase URL / anon キーだけを知り、Gemini キーには一切触れません。
 
-キーはクライアントに置かず、必ず Edge Function 経由で呼びます。
+1. **Gemini APIキー**を [Google AI Studio](https://aistudio.google.com/apikey) で発行（`AIza…`）。
+2. **Supabase プロジェクト**を作成し、DBスキーマを適用：
+   ```bash
+   npm i -g supabase
+   supabase link --project-ref <your-project-ref>
+   supabase db push                       # supabase/migrations を適用
+   ```
+3. **Edge Function をデプロイ**し、Gemini キーをサーバー側シークレットに設定：
+   ```bash
+   supabase functions deploy ai --no-verify-jwt
+   supabase secrets set GEMINI_API_KEY=<あなたの新しいGeminiキー>
+   ```
+4. **アプリの環境変数**を設定（`.env.example` をコピー）：
+   ```bash
+   cp .env.example .env
+   # .env に Supabase の URL と anon キーを記入（Supabase 管理画面 → Settings → API）
+   ```
+5. `npx expo start -c` で再起動。`EXPO_PUBLIC_SUPABASE_URL` が設定されていれば、
+   `src/services/index.ts` が自動で **実 Gemini 接続**に切り替わります（未設定ならモックのまま）。
+
+> 切り抜き（背景除去）と発音TTSは現状モック（撮った写真をそのままカード画像に使用）。次フェーズで実API化。
 
 ## iOS ビルド（Mac 不要）
 

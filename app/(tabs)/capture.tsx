@@ -30,26 +30,33 @@ export default function CaptureScreen() {
   const remaining = remainingCaptures(profile.plan, capturedToday);
   const allowed = canCapture(profile.plan, capturedToday);
 
-  /** Kick off the analyze → confirm pipeline for a captured photo URI. */
-  const shoot = async (photo: string) => {
+  /** Kick off the analyze → confirm pipeline for a captured photo. */
+  const shoot = async (photo: string, imageBase64?: string) => {
     if (!allowed) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setShotPhoto(photo);
     setPhase('analyzing');
-    const results = await services.identify.identify({
-      photo,
-      target: profile.targetLanguage,
-      native: profile.nativeLanguage,
-    });
-    setCandidates(results);
-    setPhase('confirm');
+    try {
+      const results = await services.identify.identify({
+        photo,
+        imageBase64,
+        target: profile.targetLanguage,
+        native: profile.nativeLanguage,
+      });
+      setCandidates(results);
+      setPhase('confirm');
+    } catch {
+      // Identify failed (e.g. network/key issue) — fall back to manual entry.
+      setCandidates([]);
+      setPhase('confirm');
+    }
   };
 
   const takePhoto = async () => {
     if (!cameraRef.current || !allowed) return;
     try {
-      const pic = await cameraRef.current.takePictureAsync({ quality: 0.8 });
-      if (pic?.uri) shoot(pic.uri);
+      const pic = await cameraRef.current.takePictureAsync({ quality: 0.6, base64: true });
+      if (pic?.uri) shoot(pic.uri, pic.base64);
     } catch {
       /* shutter failed — stay idle */
     }
@@ -59,9 +66,12 @@ export default function CaptureScreen() {
     if (!allowed) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 0.8,
+      quality: 0.6,
+      base64: true,
     });
-    if (!result.canceled && result.assets[0]?.uri) shoot(result.assets[0].uri);
+    if (!result.canceled && result.assets[0]?.uri) {
+      shoot(result.assets[0].uri, result.assets[0].base64 ?? undefined);
+    }
   };
 
   const confirm = async (c: IdentifyCandidate) => {

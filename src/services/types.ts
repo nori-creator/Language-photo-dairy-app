@@ -7,8 +7,17 @@ import { IdentifyCandidate, LanguageCode, VocabCard } from '@/types';
  */
 
 export interface IdentifyService {
-  /** Analyze a photo and propose several candidate subjects to turn into a card. */
-  identify(input: { photo: string; target: LanguageCode; native: LanguageCode }): Promise<IdentifyCandidate[]>;
+  /**
+   * Analyze a photo and propose several candidate subjects to turn into a card.
+   * `photo` is the display URI; `imageBase64` (when present) is the raw image
+   * the real vision model analyses.
+   */
+  identify(input: {
+    photo: string;
+    imageBase64?: string;
+    target: LanguageCode;
+    native: LanguageCode;
+  }): Promise<IdentifyCandidate[]>;
 }
 
 export interface CutoutService {

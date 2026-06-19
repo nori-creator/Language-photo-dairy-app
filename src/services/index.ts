@@ -1,10 +1,17 @@
+import { hasAiBackend } from '@/config';
 import { mockCutout, mockEnrich, mockIdentify, mockTts } from './mock';
+import { geminiEnrich, geminiIdentify } from './gemini';
 import { CutoutService, EnrichService, IdentifyService, TtsService } from './types';
 
 /**
- * Service registry. Today everything points at the mock implementations so the
- * app runs with zero API keys. When the Supabase Edge Functions are deployed,
- * swap these bindings for the real clients (see README → "実APIキーの設定").
+ * Service registry.
+ *
+ * - When EXPO_PUBLIC_SUPABASE_URL / _ANON_KEY are set (see .env.example), the
+ *   identify + enrich services hit the real Gemini-backed Edge Function.
+ * - Otherwise everything runs on the offline mocks (no keys needed).
+ *
+ * Cutout (background removal) and TTS stay mocked for now: the captured photo
+ * is used as-is for the card, and pronunciation audio is a later phase.
  */
 export const services: {
   identify: IdentifyService;
@@ -12,9 +19,9 @@ export const services: {
   enrich: EnrichService;
   tts: TtsService;
 } = {
-  identify: mockIdentify,
+  identify: hasAiBackend ? geminiIdentify : mockIdentify,
   cutout: mockCutout,
-  enrich: mockEnrich,
+  enrich: hasAiBackend ? geminiEnrich : mockEnrich,
   tts: mockTts,
 };
 
