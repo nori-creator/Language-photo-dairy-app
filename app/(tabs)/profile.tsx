@@ -3,10 +3,10 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useApp } from '@/store/AppStore';
 import { isDue } from '@/lib/srs';
 import { radius, spacing, useColors } from '@/theme';
-import { AppText } from '@/components';
+import { AppText, PrimaryButton } from '@/components';
 
 export default function ProfileScreen() {
-  const { cards, profile } = useApp();
+  const { cards, profile, session, signOut } = useApp();
   const colors = useColors();
 
   const stats = useMemo(() => {
@@ -69,6 +69,12 @@ export default function ProfileScreen() {
         <Divider colors={colors} horizontal />
         <SettingRow label="プラン" value={profile.plan === 'pro' ? 'Pro' : '無料'} colors={colors} />
       </View>
+
+      {/* Account */}
+      <View style={[styles.card, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
+        <SettingRow label="アカウント" value={session?.user.email ?? '—'} colors={colors} />
+      </View>
+      <PrimaryButton title="ログアウト" onPress={signOut} variant="tinted" />
     </ScrollView>
   );
 }

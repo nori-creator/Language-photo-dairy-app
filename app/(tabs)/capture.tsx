@@ -8,6 +8,7 @@ import { useApp } from '@/store/AppStore';
 import { services } from '@/services';
 import { canCapture, remainingCaptures } from '@/lib/quota';
 import { initialSrs } from '@/lib/srs';
+import { uploadImage } from '@/lib/storage';
 import { radius, spacing, useColors } from '@/theme';
 import { AppText, GotchaOverlay, PrimaryButton, ScanOverlay, Sticker } from '@/components';
 import { IdentifyCandidate, VocabCard } from '@/types';
@@ -15,7 +16,7 @@ import { IdentifyCandidate, VocabCard } from '@/types';
 type Phase = 'idle' | 'analyzing' | 'confirm' | 'building';
 
 export default function CaptureScreen() {
-  const { profile, capturedToday, addCard } = useApp();
+  const { profile, capturedToday, addCard, session } = useApp();
   const colors = useColors();
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -82,10 +83,28 @@ export default function CaptureScreen() {
       services.cutout.cutout({ photo: shotPhoto, imageBase64: shotBase64 }),
       services.enrich.enrich({ word: c.word, target: profile.targetLanguage, native: profile.nativeLanguage }),
     ]);
+
+    // Persist images to Storage so the card survives restarts / syncs across
+    // devices. Falls back to the local URI/data on any failure.
+    let photoUrl = shotPhoto;
+    let stickerUrl = sticker;
+    const userId = session?.user.id;
+    if (userId && shotBase64) {
+      try {
+        photoUrl = await uploadImage(userId, shotBase64, 'photo', 'image/jpeg');
+        stickerUrl = sticker.startsWith('data:')
+          ? await uploadImage(userId, sticker, 'sticker', 'image/png')
+          : photoUrl; // no cut-out → reuse the photo
+      } catch {
+        photoUrl = shotPhoto;
+        stickerUrl = sticker;
+      }
+    }
+
     const card: VocabCard = {
       id: `c_${Date.now()}`,
-      sticker,
-      photo: shotPhoto,
+      sticker: stickerUrl,
+      photo: photoUrl,
       targetLanguage: profile.targetLanguage,
       word: c.word,
       categoryId: c.categoryId,
@@ -95,8 +114,8 @@ export default function CaptureScreen() {
       srs: initialSrs(),
       capturedAt: new Date().toISOString(),
     };
-    addCard(card);
-    setGotcha({ sticker, word: c.word });
+    await addCard(card);
+    setGotcha({ sticker: stickerUrl, word: c.word });
     reset();
   };
 

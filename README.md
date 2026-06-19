@@ -98,14 +98,26 @@ APIキーは**アプリに埋め込まず**、Supabase Edge Function のシー�
 
 > identify（写真→単語）・enrich（意味/例文）・cutout（remove.bg背景除去）が実API。発音TTSは次フェーズ。
 
-## iOS ビルド（Mac 不要）
+## ログインとデータ保存（マルチユーザー）
+
+- 認証は **Supabase Auth（メール＋パスワード）**。未ログインなら `app/login.tsx` に誘導。
+- カード・プロフィール・SRSは **Supabase に永続化**（`src/store/AppStore.tsx`）。再起動・別端末でも復元。
+- 撮影画像は **Supabase Storage（`captures` バケット）** に保存し公開URLをカードに記録（`src/lib/storage.ts`）。
+- **RLS** により各ユーザーは自分の行・自分のフォルダのみアクセス可（`supabase/migrations`）。
+- セットアップ時は Supabase 管理画面 → Authentication → Providers → Email で
+  **「Confirm email」をオフ**にすると、確認メール無しでサインインできて手軽（少人数運用向け）。
+
+## Android で配布（友達に渡す）
 
 ```bash
 npm i -g eas-cli
-eas build -p ios      # クラウドビルド → .ipa を生成
-eas build -p android  # Android も同様
+eas login
+eas build -p android --profile preview   # APK をクラウドビルド
 ```
-TestFlight 配布で iPad/iPhone 実機検証が可能です（要 Apple Developer アカウント）。
+完了すると **APK のダウンロードリンク**が出るので、それを共有 → Android で開いてインストール（PC不要）。
+Supabase の公開値は `eas.json` の `env` に含めてあるため、ビルド済みアプリでもそのままログイン・保存できます。
+
+> iOS スタンドアロン配布は TestFlight（要 Apple Developer アカウント）。それまでは Expo Go でも可。
 
 ## ロードマップ
 
