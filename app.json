@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Lexilog",
+    "slug": "photo-vocab-diary",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "lexilog",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lexilog.app"
+    },
+    "android": {
+      "package": "com.lexilog.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A84FF"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
