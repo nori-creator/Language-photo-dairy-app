@@ -21,5 +21,5 @@ export const timing = {
 } as const;
 
 /** Tap feedback: scale down on press, spring back. Range 0.95–0.97. */
-export const PRESS_SCALE = 0.96;
-export const PRESS_OPACITY = 0.9;
+export const PRESS_SCALE = 0.95;
+export const PRESS_OPACITY = 0.88;

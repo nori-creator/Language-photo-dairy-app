@@ -2,7 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { HIT_TARGET, PRESS_OPACITY, PRESS_SCALE, radius, shadow, spacing, spring, useColors } from '@/theme';
+import { HIT_TARGET, PRESS_OPACITY, PRESS_SCALE, radius, spacing, spring, useColors } from '@/theme';
 import { AppText } from './AppText';
 
 interface Props {
@@ -43,7 +43,7 @@ export function PrimaryButton({ title, onPress, variant = 'filled', loading, dis
       onPressOut={() => (pressed.value = 0)}
       style={[
         styles.base,
-        isFilled && [{ backgroundColor: colors.blue }, shadow.sm],
+        isFilled && [{ backgroundColor: colors.blue, shadowColor: colors.blue }, styles.filledGlow],
         isTinted && { backgroundColor: colors.fill },
         isPlain && styles.plain,
         animatedStyle,
@@ -70,4 +70,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   plain: { minHeight: HIT_TARGET, paddingHorizontal: spacing.md },
+  // Soft blue "floating" glow under the primary action.
+  filledGlow: { shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
 });
