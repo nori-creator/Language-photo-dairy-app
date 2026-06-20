@@ -1,136 +1,126 @@
 import React, { useEffect } from 'react';
-import { Modal, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import { ImageBackground, Modal, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { Image } from 'expo-image';
-import { BlurView } from 'expo-blur';
-import { radius, shadow, spacing, spring, timing, useColors } from '@/theme';
+import { radius, spacing, spring, timing, useColors } from '@/theme';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { feedback } from '@/lib/feedback';
+import { services } from '@/services';
+import { LanguageCode } from '@/types';
 import { AppText } from './AppText';
+import { Icon, PressableScale } from './ui';
+import { CutoutSticker } from './CutoutSticker';
 
 interface Props {
   visible: boolean;
-  /** Captured photo URI (the "before"). */
   photo: string;
-  /** Cut-out sticker (transparent PNG) if ready; falls back to the photo. */
   sticker?: string | null;
   word: string;
   reading?: string;
+  target?: LanguageCode;
   onDone: () => void;
 }
 
-const FRAME = 240;
+// Sparkle positions around the sticker (relative to centre).
+const SPARKS = [
+  { x: -96, y: -54, s: 6 }, { x: 84, y: -88, s: 5 }, { x: 104, y: 14, s: 7 },
+  { x: -104, y: 36, s: 5 }, { x: 60, y: 104, s: 6 }, { x: -64, y: 112, s: 4 },
+  { x: 6, y: -128, s: 5 }, { x: 120, y: 70, s: 4 },
+];
+
+function Sparkle({ x, y, s, i, t }: { x: number; y: number; s: number; i: number; t: SharedValue<number> }) {
+  const style = useAnimatedStyle(() => {
+    const v = (t.value + i * 0.17) % 1;
+    const o = Math.sin(v * Math.PI);
+    return { opacity: 0.15 + o * 0.85, transform: [{ scale: 0.5 + o * 0.7 }] };
+  });
+  return <Animated.View style={[styles.spark, { width: s, height: s, borderRadius: s / 2, left: '50%', top: '50%', marginLeft: x, marginTop: y }, style]} />;
+}
 
 /**
- * The reward performance: the captured photo lifts off its background, crisps
- * into a cut-out sticker, then settles onto a forming collection card — with
- * sound + haptic + visual in sync. Restrained (single accent, one ring pulse),
- * never confetti. Hides the brief enrich/upload wait behind the motion.
+ * The reward moment, CapWords-style: on bright dotted paper, a warm glow blooms
+ * with twinkling sparkles, the cut-out sticker pops in, the word + reading rise,
+ * and the Taiwan pronunciation auto-plays. Refined — no dark scrim, no clutter.
  */
-export function StickerRevealOverlay({ visible, photo, sticker, word, reading, onDone }: Props) {
+export function StickerRevealOverlay({ visible, photo, sticker, word, reading, target = 'zh-TW', onDone }: Props) {
   const colors = useColors();
   const reduced = useReducedMotion();
-  const { width } = useWindowDimensions();
-  const hasCutout = !!sticker && sticker !== photo && /^(file:|content:|https?:|data:)/.test(sticker);
 
-  const intro = useSharedValue(0.82);
-  const lift = useSharedValue(0);
-  const toCard = useSharedValue(0);
-  const ring = useSharedValue(0);
+  const fade = useSharedValue(0);
+  const pop = useSharedValue(reduced ? 1 : 0.6);
+  const glow = useSharedValue(reduced ? 1 : 0.3);
   const label = useSharedValue(0);
-  const flash = useSharedValue(0);
-  const out = useSharedValue(1);
+  const twinkle = useSharedValue(0);
 
   useEffect(() => {
     if (!visible) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    fade.value = withTiming(1, timing.standard);
 
     if (reduced) {
-      intro.value = 1;
-      toCard.value = withTiming(1, timing.standard);
-      label.value = withDelay(120, withTiming(1, timing.standard));
+      label.value = withTiming(1, timing.standard);
       feedback.success();
-      timers.push(setTimeout(() => (out.value = withTiming(0, timing.standard)), 1200));
-      timers.push(setTimeout(onDone, 1560));
-      return () => timers.forEach(clearTimeout);
+    } else {
+      glow.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) });
+      pop.value = withDelay(80, withSpring(1, spring.bouncy));
+      label.value = withDelay(260, withTiming(1, timing.standard));
+      twinkle.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.linear }), -1, false);
+      timers.push(setTimeout(() => feedback.success(), 120));
     }
-
-    // 1) Photo eases in.
-    intro.value = withSpring(1, spring.soft);
-    // 2) Lift off the background.
-    lift.value = withDelay(160, withTiming(1, timing.standard));
-    timers.push(setTimeout(() => feedback.lift(), 180));
-    // 3) Settle onto the forming card + a screen-filling accent flash, an
-    //    expanding ring, and the label rising in.
-    toCard.value = withDelay(620, withSpring(1, spring.bouncy));
-    ring.value = withDelay(620, withSequence(withTiming(1, timing.micro), withTiming(0, timing.soft)));
-    flash.value = withDelay(620, withSequence(withTiming(1, { duration: 150 }), withTiming(0, timing.soft)));
-    label.value = withDelay(780, withSpring(1, spring.soft));
-    timers.push(setTimeout(() => feedback.success(), 640));
-    // 4) Dismiss.
-    timers.push(setTimeout(() => (out.value = withTiming(0, timing.standard)), 1700));
-    timers.push(setTimeout(onDone, 2040));
-
+    // Auto-play the native pronunciation as the reward lands.
+    timers.push(setTimeout(() => services.tts.speak({ text: word, target }).catch(() => {}), 360));
+    // Dismiss.
+    timers.push(setTimeout(() => (fade.value = withTiming(0, timing.standard)), 2000));
+    timers.push(setTimeout(onDone, 2340));
     return () => timers.forEach(clearTimeout);
   }, [visible, reduced]);
 
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: out.value }));
-  const cardStyle = useAnimatedStyle(() => ({
-    opacity: toCard.value,
-    transform: [{ scale: 0.9 + toCard.value * 0.1 }],
-  }));
-  const subjectStyle = useAnimatedStyle(() => {
-    const s = intro.value * (1 + lift.value * 0.06) * (1 - toCard.value * 0.32);
-    return {
-      transform: [
-        { translateY: -lift.value * 8 + toCard.value * -8 },
-        { scale: s },
-      ],
-    };
-  });
-  const subjectRadius = useAnimatedStyle(() => ({ borderRadius: 12 + lift.value * 16 }));
-  const dimStyle = useAnimatedStyle(() => ({ opacity: lift.value * (hasCutout ? 0.6 : 0.25) }));
-  const cutoutStyle = useAnimatedStyle(() => ({ opacity: lift.value }));
-  const ringStyle = useAnimatedStyle(() => ({ opacity: ring.value * 0.85, transform: [{ scale: 1 + ring.value * 0.9 }] }));
-  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value * 0.22 }));
-  const labelStyle = useAnimatedStyle(() => ({ opacity: label.value, transform: [{ translateY: (1 - label.value) * 16 }] }));
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 0.7 + glow.value * 0.5 }] }));
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const labelStyle = useAnimatedStyle(() => ({ opacity: label.value, transform: [{ translateY: (1 - label.value) * 14 }] }));
 
   if (!visible) return null;
 
+  const replay = () => {
+    feedback.tap();
+    services.tts.speak({ text: word, target }).catch(() => {});
+  };
+
   return (
     <Modal transparent visible={visible} animationType="fade">
-      <Animated.View style={[styles.scrim, scrimStyle]}>
-        <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
+      <Animated.View style={[styles.scrim, { backgroundColor: colors.systemBackground }, fadeStyle]}>
+        <ImageBackground source={require('../../assets/dot-tile.png')} resizeMode="repeat" style={StyleSheet.absoluteFill} />
 
-        {/* Screen-filling accent flash at the reward beat */}
-        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.blue }, flashStyle]} pointerEvents="none" />
-
-        {/* Centered stage */}
-        <View style={[styles.stage, { width: Math.min(width - 48, 340) }]}>
-          {/* Forming collection card (background panel) */}
-          <Animated.View style={[styles.card, { backgroundColor: colors.secondarySystemGroupedBackground }, shadow.modal, cardStyle]} />
-
-          {/* Subject: photo that lifts, then crisps into a sticker */}
-          <View style={styles.frame} pointerEvents="none">
-            <Animated.View style={[styles.ring, { borderColor: colors.blue }, ringStyle]} />
-            <Animated.View style={[styles.subject, subjectStyle]}>
-              <Animated.View style={[styles.imgClip, subjectRadius]}>
-                <Image source={{ uri: photo }} style={styles.img} contentFit="cover" />
-                <Animated.View style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} pointerEvents="none" />
-                {hasCutout && (
-                  <Animated.View style={[StyleSheet.absoluteFill, cutoutStyle]}>
-                    <Image source={{ uri: sticker! }} style={styles.img} contentFit="contain" />
-                  </Animated.View>
-                )}
-              </Animated.View>
+        <View style={styles.center}>
+          <View style={styles.stageWrap}>
+            <Animated.Image source={require('../../assets/glow.png')} style={[styles.glow, glowStyle]} />
+            {!reduced && SPARKS.map((sp, i) => (
+              <Sparkle key={i} {...sp} i={i} t={twinkle} />
+            ))}
+            <Animated.View style={popStyle}>
+              <CutoutSticker uri={sticker || photo} size={220} />
             </Animated.View>
           </View>
 
-          {/* Word label */}
           <Animated.View style={[styles.label, labelStyle]}>
-            <AppText variant="title1" color="#fff">{word}</AppText>
-            {!!reading && <AppText variant="headline" color="rgba(255,255,255,0.7)">{reading}</AppText>}
-            <AppText variant="subhead" color="rgba(255,255,255,0.7)" style={{ marginTop: spacing.xs }}>
+            <View style={styles.wordRow}>
+              <AppText variant="title1" color={colors.label} style={styles.word}>{word}</AppText>
+              <PressableScale onPress={replay} haptic={false} style={styles.speaker}>
+                <Icon name="volume-high" size={18} color="#fff" />
+              </PressableScale>
+            </View>
+            {!!reading && <AppText variant="headline" color={colors.secondaryLabel}>{reading}</AppText>}
+            <AppText variant="subhead" color={colors.tertiaryLabel} style={{ marginTop: spacing.sm }}>
               コレクションに追加
             </AppText>
           </Animated.View>
@@ -140,15 +130,15 @@ export function StickerRevealOverlay({ visible, photo, sticker, word, reading, o
   );
 }
 
+const GLOW = 300;
 const styles = StyleSheet.create({
-  scrim: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' },
-  stage: { alignItems: 'center', justifyContent: 'center' },
-  card: { position: 'absolute', top: -24, bottom: -24, left: -4, right: -4, borderRadius: radius.xxl },
-  frame: { width: FRAME, height: FRAME, alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', top: -12, left: -12, width: FRAME + 24, height: FRAME + 24, borderRadius: radius.xxl, borderWidth: 2 },
-  subject: { width: FRAME, height: FRAME, alignItems: 'center', justifyContent: 'center' },
-  imgClip: { width: FRAME, height: FRAME, overflow: 'hidden' },
-  img: { width: '100%', height: '100%' },
-  dim: { backgroundColor: 'rgba(0,0,0,1)' },
-  label: { marginTop: spacing.xxl, alignItems: 'center', gap: 2 },
+  scrim: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  stageWrap: { width: 240, height: 240, alignItems: 'center', justifyContent: 'center' },
+  glow: { position: 'absolute', width: GLOW, height: GLOW },
+  spark: { position: 'absolute', backgroundColor: '#FFC95C' },
+  label: { alignItems: 'center', marginTop: spacing.xl, gap: 2 },
+  wordRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  word: { fontWeight: '800' as const },
+  speaker: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#0A84FF', alignItems: 'center', justifyContent: 'center' },
 });

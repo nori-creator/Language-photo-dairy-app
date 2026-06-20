@@ -38,6 +38,10 @@ export default function CardDetail() {
     feedback.tap();
     services.tts.speak({ text: card.word, target: card.targetLanguage }).catch(() => {});
   };
+  const say = (text: string) => {
+    feedback.tap();
+    services.tts.speak({ text, target: card.targetLanguage }).catch(() => {});
+  };
 
   return (
     <>
@@ -85,31 +89,44 @@ export default function CardDetail() {
         )}
 
         {card.examples.length > 0 && (
-          <Section title="例文" colors={colors}>
+          <Section title="例文" accent={colors.green} colors={colors}>
             {card.examples.map((e, i) => (
               <View key={i} style={i > 0 ? { marginTop: spacing.md } : undefined}>
-                <AppText variant="callout">{e.text}</AppText>
+                <PressableScale onPress={() => say(e.text)} style={styles.exampleRow}>
+                  <AppText variant="callout" style={{ flex: 1 }}>{e.text}</AppText>
+                  <Icon name="volume-medium" size={16} color={colors.blue} />
+                </PressableScale>
                 <AppText variant="footnote" color={colors.secondaryLabel}>{e.translation}</AppText>
               </View>
             ))}
           </Section>
         )}
         {card.collocations.length > 0 && (
-          <Section title="コロケーション" colors={colors}>
-            <AppText variant="callout">{card.collocations.join(' / ')}</AppText>
+          <Section title="コロケーション" accent={colors.indigo} colors={colors}>
+            <View style={styles.chips}>
+              {card.collocations.map((w, i) => <WordChip key={i} text={w} onPress={() => say(w)} colors={colors} />)}
+            </View>
           </Section>
         )}
         {(card.synonyms.length > 0 || card.antonyms.length > 0) && (
-          <Section title="類義語・反意語" colors={colors}>
-            {card.synonyms.length > 0 && <AppText variant="callout">≈ {card.synonyms.join('、')}</AppText>}
-            {card.antonyms.length > 0 && <AppText variant="callout">↔ {card.antonyms.join('、')}</AppText>}
+          <Section title="類義語・反意語" accent={colors.teal} colors={colors}>
+            {card.synonyms.length > 0 && (
+              <View style={styles.chips}>
+                {card.synonyms.map((w, i) => <WordChip key={`s${i}`} text={`≈ ${w}`} onPress={() => say(w)} colors={colors} />)}
+              </View>
+            )}
+            {card.antonyms.length > 0 && (
+              <View style={[styles.chips, { marginTop: spacing.sm }]}>
+                {card.antonyms.map((w, i) => <WordChip key={`a${i}`} text={`↔ ${w}`} onPress={() => say(w)} colors={colors} />)}
+              </View>
+            )}
           </Section>
         )}
         {!!card.etymology && (
-          <Section title="語源" colors={colors}><AppText variant="callout">{card.etymology}</AppText></Section>
+          <Section title="語源" accent={colors.orange} colors={colors}><AppText variant="callout">{card.etymology}</AppText></Section>
         )}
         {!!card.note && (
-          <Section title="ひとこと" colors={colors}><AppText variant="callout">{card.note}</AppText></Section>
+          <Section title="ひとこと" accent={colors.pink} colors={colors}><AppText variant="callout">{card.note}</AppText></Section>
         )}
 
         {/* Meta */}
@@ -131,12 +148,24 @@ function Badge({ text, tint, color }: { text: string; tint: string; color: strin
   );
 }
 
-function Section({ title, colors, children }: { title: string; colors: ReturnType<typeof useColors>; children: React.ReactNode }) {
+function Section({ title, accent, colors, children }: { title: string; accent?: string; colors: ReturnType<typeof useColors>; children: React.ReactNode }) {
   return (
     <Card>
-      <AppText variant="footnote" color={colors.secondaryLabel} style={styles.sectionLabel}>{title}</AppText>
+      <AppText variant="footnote" color={accent ?? colors.secondaryLabel} style={[styles.sectionLabel, { fontWeight: '700' }]}>
+        {title}
+      </AppText>
       {children}
     </Card>
+  );
+}
+
+/** A blue pill that floats up when pressed; tap to hear it spoken. */
+function WordChip({ text, onPress, colors }: { text: string; onPress: () => void; colors: ReturnType<typeof useColors> }) {
+  return (
+    <PressableScale onPress={onPress} haptic={false} style={[styles.chip, { backgroundColor: colors.blue + '16', shadowColor: colors.blue }]}>
+      <AppText variant="subhead" color={colors.blue}>{text}</AppText>
+      <Icon name="volume-low" size={13} color={colors.blue} />
+    </PressableScale>
   );
 }
 
@@ -162,7 +191,14 @@ const styles = StyleSheet.create({
   badges: { flexDirection: 'row', gap: spacing.sm, marginTop: -spacing.xs },
   badge: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.full },
   meaning: { borderRadius: radius.lg, padding: spacing.lg },
-  sectionLabel: { marginBottom: spacing.xs },
+  sectionLabel: { marginBottom: spacing.sm },
+  exampleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full,
+    shadowOpacity: 0.18, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2,
+  },
   meta: { gap: spacing.sm, marginTop: spacing.xs },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   delete: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

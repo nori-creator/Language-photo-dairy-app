@@ -272,6 +272,7 @@ export default function CaptureScreen() {
         sticker={reveal?.sticker}
         word={reveal?.word ?? ''}
         reading={reveal?.reading}
+        target={profile.targetLanguage}
         onDone={() => {
           setReveal(null);
           reset();

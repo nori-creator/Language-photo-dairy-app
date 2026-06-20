@@ -74,10 +74,11 @@ async function identify(body: any) {
 
   const prompt =
     `You are a Traditional Chinese (Taiwan Mandarin, 台灣華語) vocabulary assistant for a ` +
-    `Japanese learner. Look at the photo and identify the single most prominent, learnable object. ` +
-    `Respond with ONLY a JSON array of up to 3 candidate objects, ordered by confidence descending. ` +
+    `Japanese learner. Look at the photo and identify the most prominent, learnable objects. ` +
+    `Respond with ONLY a JSON array of up to 5 candidate objects, ordered by confidence descending. ` +
     `Each object has exactly these keys: ` +
-    `"word" (the everyday term in TRADITIONAL CHINESE as used in TAIWAN — NEVER Japanese, NEVER Simplified Chinese), ` +
+    `"word" (the everyday term in TRADITIONAL CHINESE characters as used in TAIWAN — NEVER Japanese, ` +
+    `NEVER Simplified Chinese, NEVER English/romanization), ` +
     `"reading" (Zhuyin / 注音符號 with tone marks, e.g. "ㄅㄧˇ"), ` +
     `"nativeTranslation" (in Japanese), ` +
     `"emoji" (one representative emoji), ` +
@@ -97,8 +98,12 @@ async function enrich(body: any) {
   if (!word) return json({ error: 'word required' }, 400);
 
   const prompt =
-    `Build a vocabulary flash-card for the Traditional Chinese (Taiwan Mandarin, 台灣華語) word "${word}". ` +
-    `Treat it strictly as Taiwan Mandarin — NEVER as Japanese. Write all explanations in Japanese. ` +
+    `You are a professional Taiwan Mandarin (台灣華語) lexicographer. Build an ACCURATE vocabulary ` +
+    `flash-card for the word "${word}". Every field must be linguistically correct and natural to ` +
+    `native Taiwanese speakers (台灣教育部 usage); example sentences must be natural daily Taiwan usage, ` +
+    `grammatical, and actually contain the word. ` +
+    `Treat it strictly as Taiwan Mandarin — NEVER as Japanese, NEVER Simplified Chinese. ` +
+    `All Chinese text MUST be Traditional characters as used in Taiwan. Write all explanations in Japanese. ` +
     `Respond with ONLY a JSON object with these keys: ` +
     `"reading" (Zhuyin / 注音符號 with tone marks, e.g. "ㄅㄧˇ" — NOT pinyin, NOT kana), ` +
     `"ipa" (empty string ""), ` +
