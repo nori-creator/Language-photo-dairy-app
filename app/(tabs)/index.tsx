@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/store/AppStore';
@@ -9,17 +9,34 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { AppText, Icon, PressableScale, Sticker } from '@/components';
 import { VocabCard } from '@/types';
 
+// Warm "real paper" album page — kept constant across light/dark.
+const PAPER = '#F6F3EC';
+const INK = '#2B2B2E';
+const ANGLES = [-5, 4, -3, 6, -4, 3, -6, 2, 5, -2];
+
+/** Bigger cut-outs when there are fewer, so each day's page stays full. */
+function itemSize(n: number): number {
+  if (n <= 1) return 230;
+  if (n === 2) return 188;
+  if (n === 3) return 158;
+  if (n === 4) return 146;
+  if (n <= 6) return 130;
+  return 112;
+}
+
 /**
- * The home is a daily photo scrapbook: each day is a page, every captured
- * subject is "pasted" as a polaroid (gently rotated, taped, soft shadow) —
- * an American-yearbook cut-out album. Photos dominate the screen.
+ * Home = a daily photo album. Each day is an Instagram-style post: a white
+ * paper page that fills the screen, with the day's cut-outs "pasted" as a
+ * centered collage. Swipe between days.
  */
 export default function DiaryScreen() {
   const { diary, cards, profile } = useApp();
   const colors = useColors();
   const router = useRouter();
   const reduced = useReducedMotion();
+  const { height } = useWindowDimensions();
   const cardById = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
+  const boardH = Math.round(height * 0.6);
 
   return (
     <ScrollView
@@ -27,7 +44,6 @@ export default function DiaryScreen() {
       style={{ backgroundColor: colors.systemGroupedBackground }}
       contentContainerStyle={styles.content}
     >
-      {/* Slim streak chip */}
       <View style={styles.streak}>
         <Icon name="flame" size={16} color={colors.label} />
         <AppText variant="subhead">{profile.streak}日連続</AppText>
@@ -41,50 +57,49 @@ export default function DiaryScreen() {
             アルバムはまだ空っぽ
           </AppText>
           <AppText variant="footnote" color={colors.tertiaryLabel} style={{ marginTop: spacing.xs }}>
-            「撮る」で1日のページに写真を貼っていこう
+            「撮る」で今日のページに写真を貼っていこう
           </AppText>
         </View>
       )}
 
       {diary.map((entry, idx) => {
         const dayCards = entry.cardIds.map((id) => cardById.get(id)).filter(Boolean) as VocabCard[];
+        const size = itemSize(dayCards.length);
         return (
           <Animated.View
             key={entry.date}
             entering={reduced ? undefined : FadeIn.delay(idx * 50).duration(360)}
-            style={[styles.page, { backgroundColor: colors.secondarySystemGroupedBackground }]}
+            style={styles.post}
           >
-            <View style={styles.pageHeader}>
-              <AppText variant="title3">{formatDate(entry.date)}</AppText>
+            <View style={styles.caption}>
+              <AppText variant="headline">{formatDate(entry.date)}</AppText>
               <AppText variant="footnote" color={colors.secondaryLabel}>{dayCards.length}枚</AppText>
             </View>
-            <View style={styles.board}>
-              {dayCards.map((c, i) => (
-                <Polaroid key={c.id} card={c} index={i} onPress={() => router.push(`/card/${c.id}`)} />
-              ))}
+
+            <View style={[styles.board, { minHeight: boardH }, shadow.card]}>
+              <View style={styles.collage}>
+                {dayCards.map((c, i) => (
+                  <PressableScale
+                    key={c.id}
+                    onPress={() => router.push(`/card/${c.id}`)}
+                    style={{ transform: [{ rotate: `${ANGLES[i % ANGLES.length]}deg` }] }}
+                  >
+                    <View style={[styles.pasted, shadow.popover]}>
+                      <View style={[styles.photo, { width: size, height: size }]}>
+                        <Sticker emoji={c.sticker} size={size} blur={blurAmount(c.srs)} />
+                      </View>
+                      <AppText variant="caption1" color={INK} numberOfLines={1} style={{ maxWidth: size }}>
+                        {c.word}
+                      </AppText>
+                    </View>
+                  </PressableScale>
+                ))}
+              </View>
             </View>
           </Animated.View>
         );
       })}
     </ScrollView>
-  );
-}
-
-const ANGLES = [-5, 4, -3, 5, -4, 3, -2, 4];
-const PHOTO = 150;
-
-function Polaroid({ card, index, onPress }: { card: VocabCard; index: number; onPress: () => void }) {
-  const angle = ANGLES[index % ANGLES.length];
-  return (
-    <PressableScale onPress={onPress} style={{ transform: [{ rotate: `${angle}deg` }] }}>
-      <View style={[styles.polaroid, shadow.popover]}>
-        <View style={styles.tape} />
-        <View style={styles.photo}>
-          <Sticker emoji={card.sticker} size={PHOTO} blur={blurAmount(card.srs)} />
-        </View>
-        <AppText variant="subhead" color="#1c1c1e" numberOfLines={1} style={styles.caption}>{card.word}</AppText>
-      </View>
-    </PressableScale>
   );
 }
 
@@ -96,26 +111,26 @@ function formatDate(key: string): string {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
+  content: { padding: spacing.lg, gap: spacing.xl, paddingBottom: spacing.xxxl },
   streak: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   empty: { alignItems: 'center', paddingVertical: spacing.xxxl },
-  page: { borderRadius: radius.xl, padding: spacing.lg, paddingTop: spacing.md },
-  pageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
-  board: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.xl, paddingVertical: spacing.sm },
-  polaroid: {
-    backgroundColor: '#FFFFFF',
-    padding: spacing.sm,
-    paddingBottom: spacing.md,
-    borderRadius: 4,
+  post: { gap: spacing.sm },
+  caption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
+  board: {
+    backgroundColor: PAPER,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  tape: {
-    position: 'absolute', top: -7, alignSelf: 'center',
-    width: 54, height: 16, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.06)',
-    transform: [{ rotate: '-3deg' }],
+  collage: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignContent: 'center',
+    gap: spacing.xl,
   },
-  photo: { width: PHOTO, height: PHOTO, borderRadius: 2, overflow: 'hidden', backgroundColor: '#EDEDED' },
-  caption: { marginTop: spacing.xs, maxWidth: PHOTO },
+  pasted: { backgroundColor: '#FFFFFF', padding: spacing.xs, paddingBottom: spacing.sm, borderRadius: 6, alignItems: 'center' },
+  photo: { borderRadius: 3, overflow: 'hidden', backgroundColor: '#ECECEC', marginBottom: 4 },
 });

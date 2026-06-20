@@ -115,6 +115,23 @@ async function enrich(body: any) {
   return json({ fields });
 }
 
+async function tts(body: any) {
+  const { text } = body;
+  if (!text) return json({ error: 'text required' }, 400);
+  // Google Translate TTS with tl=zh-TW yields a natural Taiwan Mandarin voice.
+  const url =
+    `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=zh-TW&q=${encodeURIComponent(text)}`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`tts ${res.status}: ${detail.slice(0, 120)}`);
+  }
+  const buf = new Uint8Array(await res.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < buf.length; i++) binary += String.fromCharCode(buf[i]);
+  return json({ audioBase64: btoa(binary), mime: 'audio/mpeg' });
+}
+
 async function cutout(body: any) {
   const { imageBase64 } = body;
   if (!imageBase64) return json({ error: 'imageBase64 required' }, 400);
@@ -155,6 +172,8 @@ Deno.serve(async (req) => {
       case 'enrich':
         if (!GEMINI_API_KEY) return json({ error: 'GEMINI_API_KEY not set' }, 500);
         return await enrich(body);
+      case 'tts':
+        return await tts(body);
       case 'cutout':
         return await cutout(body);
       default:

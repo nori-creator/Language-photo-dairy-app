@@ -20,7 +20,8 @@ let players: Partial<Record<SoundName, AudioPlayer>> = {};
 let muted = false;
 
 try {
-  setAudioModeAsync({ playsInSilentMode: false, interruptionMode: 'mixWithOthers', shouldPlayInBackground: false });
+  // playsInSilentMode so tapped pronunciation is always audible.
+  setAudioModeAsync({ playsInSilentMode: true, interruptionMode: 'mixWithOthers', shouldPlayInBackground: false });
   for (const name of Object.keys(sources) as SoundName[]) {
     players[name] = createAudioPlayer(sources[name]);
     players[name]!.volume = 0.7;

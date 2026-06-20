@@ -105,36 +105,36 @@ export function StickerRevealOverlay({ visible, photo, sticker, word, reading, o
         {/* Screen-filling accent flash at the reward beat */}
         <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.blue }, flashStyle]} pointerEvents="none" />
 
-        {/* Forming collection card */}
-        <Animated.View style={[styles.card, { width: Math.min(width - 64, 320), backgroundColor: colors.secondarySystemGroupedBackground }, shadow.modal, cardStyle]} />
+        {/* Centered stage */}
+        <View style={[styles.stage, { width: Math.min(width - 48, 340) }]}>
+          {/* Forming collection card (background panel) */}
+          <Animated.View style={[styles.card, { backgroundColor: colors.secondarySystemGroupedBackground }, shadow.modal, cardStyle]} />
 
-        {/* Accent ring pulse */}
-        <Animated.View style={[styles.ring, { borderColor: colors.blue }, ringStyle]} />
-
-        {/* The subject: photo that lifts, then crisps into a sticker */}
-        <View style={styles.frame} pointerEvents="none">
-          <Animated.View style={[styles.subject, subjectStyle]}>
-            <Animated.View style={[styles.imgClip, subjectRadius]}>
-              <Image source={{ uri: photo }} style={styles.img} contentFit="cover" />
-              {/* background recedes (darkens) under the lifted subject */}
-              <Animated.View style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} pointerEvents="none" />
-              {hasCutout && (
-                <Animated.View style={[StyleSheet.absoluteFill, cutoutStyle]}>
-                  <Image source={{ uri: sticker! }} style={styles.img} contentFit="contain" />
-                </Animated.View>
-              )}
+          {/* Subject: photo that lifts, then crisps into a sticker */}
+          <View style={styles.frame} pointerEvents="none">
+            <Animated.View style={[styles.ring, { borderColor: colors.blue }, ringStyle]} />
+            <Animated.View style={[styles.subject, subjectStyle]}>
+              <Animated.View style={[styles.imgClip, subjectRadius]}>
+                <Image source={{ uri: photo }} style={styles.img} contentFit="cover" />
+                <Animated.View style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} pointerEvents="none" />
+                {hasCutout && (
+                  <Animated.View style={[StyleSheet.absoluteFill, cutoutStyle]}>
+                    <Image source={{ uri: sticker! }} style={styles.img} contentFit="contain" />
+                  </Animated.View>
+                )}
+              </Animated.View>
             </Animated.View>
+          </View>
+
+          {/* Word label */}
+          <Animated.View style={[styles.label, labelStyle]}>
+            <AppText variant="title1" color="#fff">{word}</AppText>
+            {!!reading && <AppText variant="headline" color="rgba(255,255,255,0.7)">{reading}</AppText>}
+            <AppText variant="subhead" color="rgba(255,255,255,0.7)" style={{ marginTop: spacing.xs }}>
+              コレクションに追加
+            </AppText>
           </Animated.View>
         </View>
-
-        {/* Word label */}
-        <Animated.View style={[styles.label, labelStyle]}>
-          <AppText variant="title1" color="#fff">{word}</AppText>
-          {!!reading && <AppText variant="headline" color="rgba(255,255,255,0.7)">{reading}</AppText>}
-          <AppText variant="subhead" color="rgba(255,255,255,0.7)" style={{ marginTop: spacing.xs }}>
-            コレクションに追加
-          </AppText>
-        </Animated.View>
       </Animated.View>
     </Modal>
   );
@@ -142,12 +142,13 @@ export function StickerRevealOverlay({ visible, photo, sticker, word, reading, o
 
 const styles = StyleSheet.create({
   scrim: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' },
-  card: { position: 'absolute', height: 360, borderRadius: radius.xxl, top: '50%', marginTop: -200 },
-  ring: { position: 'absolute', width: FRAME + 24, height: FRAME + 24, borderRadius: radius.xxl, borderWidth: 2, top: '50%', marginTop: -(FRAME + 24) / 2 - 40 },
-  frame: { position: 'absolute', top: '50%', marginTop: -FRAME / 2 - 40, alignItems: 'center', justifyContent: 'center' },
+  stage: { alignItems: 'center', justifyContent: 'center' },
+  card: { position: 'absolute', top: -24, bottom: -24, left: -4, right: -4, borderRadius: radius.xxl },
+  frame: { width: FRAME, height: FRAME, alignItems: 'center', justifyContent: 'center' },
+  ring: { position: 'absolute', top: -12, left: -12, width: FRAME + 24, height: FRAME + 24, borderRadius: radius.xxl, borderWidth: 2 },
   subject: { width: FRAME, height: FRAME, alignItems: 'center', justifyContent: 'center' },
   imgClip: { width: FRAME, height: FRAME, overflow: 'hidden' },
   img: { width: '100%', height: '100%' },
   dim: { backgroundColor: 'rgba(0,0,0,1)' },
-  label: { position: 'absolute', top: '50%', marginTop: 120, alignItems: 'center', gap: 2 },
+  label: { marginTop: spacing.xxl, alignItems: 'center', gap: 2 },
 });
