@@ -1,16 +1,19 @@
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/store/AppStore';
-import { categoryById } from '@/data/categories';
-import { categoryIcon } from '@/lib/categoryIcon';
 import { blurAmount } from '@/lib/srs';
 import { radius, shadow, spacing, useColors } from '@/theme';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { AppText, Card, Icon, PressableScale, SectionHeader, Sticker } from '@/components';
+import { AppText, Icon, PressableScale, Sticker } from '@/components';
 import { VocabCard } from '@/types';
 
+/**
+ * The home is a daily photo scrapbook: each day is a page, every captured
+ * subject is "pasted" as a polaroid (gently rotated, taped, soft shadow) —
+ * an American-yearbook cut-out album. Photos dominate the screen.
+ */
 export default function DiaryScreen() {
   const { diary, cards, profile } = useApp();
   const colors = useColors();
@@ -24,23 +27,21 @@ export default function DiaryScreen() {
       style={{ backgroundColor: colors.systemGroupedBackground }}
       contentContainerStyle={styles.content}
     >
-      {/* Streak */}
-      <Card style={styles.streak}>
-        <Icon name="flame" size={26} color={colors.label} />
-        <View style={{ flex: 1 }}>
-          <AppText variant="title2">{profile.streak}日連続</AppText>
-          <AppText variant="footnote" color={colors.secondaryLabel}>毎日1枚撮ってストリークを伸ばそう</AppText>
-        </View>
-      </Card>
+      {/* Slim streak chip */}
+      <View style={styles.streak}>
+        <Icon name="flame" size={16} color={colors.label} />
+        <AppText variant="subhead">{profile.streak}日連続</AppText>
+        <AppText variant="footnote" color={colors.secondaryLabel}>· 毎日1枚で記録を伸ばそう</AppText>
+      </View>
 
       {diary.length === 0 && (
         <View style={styles.empty}>
-          <Icon name="camera-outline" size={48} color={colors.tertiaryLabel} />
+          <Icon name="images-outline" size={48} color={colors.tertiaryLabel} />
           <AppText variant="headline" color={colors.secondaryLabel} style={{ marginTop: spacing.md }}>
-            まだ記録がありません
+            アルバムはまだ空っぽ
           </AppText>
           <AppText variant="footnote" color={colors.tertiaryLabel} style={{ marginTop: spacing.xs }}>
-            「撮る」から最初の一枚を集めよう
+            「撮る」で1日のページに写真を貼っていこう
           </AppText>
         </View>
       )}
@@ -50,36 +51,40 @@ export default function DiaryScreen() {
         return (
           <Animated.View
             key={entry.date}
-            entering={reduced ? undefined : FadeInDown.delay(idx * 60).duration(380)}
+            entering={reduced ? undefined : FadeIn.delay(idx * 50).duration(360)}
+            style={[styles.page, { backgroundColor: colors.secondarySystemGroupedBackground }]}
           >
-            <SectionHeader title={formatDate(entry.date)} accessory={`${dayCards.length}枚`} />
-            <View style={styles.grid}>
-              {dayCards.map((c) => (
-                <PressableScale key={c.id} onPress={() => router.push(`/card/${c.id}`)} style={styles.tile}>
-                  <View style={[styles.photo, { backgroundColor: colors.secondarySystemGroupedBackground }, shadow.card]}>
-                    <Sticker emoji={c.sticker} size={92} blur={blurAmount(c.srs)} />
-                  </View>
-                  <AppText variant="subhead" numberOfLines={1} style={styles.word}>{c.word}</AppText>
-                  <View style={styles.cat}>
-                    <Icon name={categoryIcon(c.categoryId)} size={11} color={colors.tertiaryLabel} />
-                    <AppText variant="caption2" color={colors.tertiaryLabel} numberOfLines={1}>
-                      {categoryById(c.categoryId)?.name}
-                    </AppText>
-                  </View>
-                </PressableScale>
+            <View style={styles.pageHeader}>
+              <AppText variant="title3">{formatDate(entry.date)}</AppText>
+              <AppText variant="footnote" color={colors.secondaryLabel}>{dayCards.length}枚</AppText>
+            </View>
+            <View style={styles.board}>
+              {dayCards.map((c, i) => (
+                <Polaroid key={c.id} card={c} index={i} onPress={() => router.push(`/card/${c.id}`)} />
               ))}
             </View>
           </Animated.View>
         );
       })}
-
-      {diary.length > 0 && (
-        <View style={styles.footerHint}>
-          <Icon name="share-outline" size={15} color={colors.tertiaryLabel} />
-          <AppText variant="footnote" color={colors.tertiaryLabel}>1日の日記は将来、友達と共有できます</AppText>
-        </View>
-      )}
     </ScrollView>
+  );
+}
+
+const ANGLES = [-5, 4, -3, 5, -4, 3, -2, 4];
+const PHOTO = 150;
+
+function Polaroid({ card, index, onPress }: { card: VocabCard; index: number; onPress: () => void }) {
+  const angle = ANGLES[index % ANGLES.length];
+  return (
+    <PressableScale onPress={onPress} style={{ transform: [{ rotate: `${angle}deg` }] }}>
+      <View style={[styles.polaroid, shadow.popover]}>
+        <View style={styles.tape} />
+        <View style={styles.photo}>
+          <Sticker emoji={card.sticker} size={PHOTO} blur={blurAmount(card.srs)} />
+        </View>
+        <AppText variant="subhead" color="#1c1c1e" numberOfLines={1} style={styles.caption}>{card.word}</AppText>
+      </View>
+    </PressableScale>
   );
 }
 
@@ -90,15 +95,27 @@ function formatDate(key: string): string {
   return key === today ? `今日 · ${label}` : label;
 }
 
-const TILE = 104;
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, gap: spacing.xl, paddingBottom: spacing.xxxl },
-  streak: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
+  streak: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   empty: { alignItems: 'center', paddingVertical: spacing.xxxl },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  tile: { width: TILE, gap: spacing.xs },
-  photo: { width: TILE, height: TILE, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  word: { marginTop: 2 },
-  cat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  footerHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
+  page: { borderRadius: radius.xl, padding: spacing.lg, paddingTop: spacing.md },
+  pageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
+  board: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.xl, paddingVertical: spacing.sm },
+  polaroid: {
+    backgroundColor: '#FFFFFF',
+    padding: spacing.sm,
+    paddingBottom: spacing.md,
+    borderRadius: 4,
+    alignItems: 'center',
+  },
+  tape: {
+    position: 'absolute', top: -7, alignSelf: 'center',
+    width: 54, height: 16, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.06)',
+    transform: [{ rotate: '-3deg' }],
+  },
+  photo: { width: PHOTO, height: PHOTO, borderRadius: 2, overflow: 'hidden', backgroundColor: '#EDEDED' },
+  caption: { marginTop: spacing.xs, maxWidth: PHOTO },
 });

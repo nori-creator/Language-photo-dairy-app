@@ -14,6 +14,7 @@ interface AppState {
   profile: Profile;
   addCard: (card: VocabCard) => Promise<void>;
   reviewCard: (id: string, recall: Recall) => void;
+  deleteCard: (id: string) => Promise<void>;
   capturedToday: number;
   diary: DiaryEntry[];
   signOut: () => Promise<void>;
@@ -128,6 +129,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const deleteCard = useCallback(async (id: string) => {
+    setCards((prev) => prev.filter((c) => c.id !== id));
+    await supabase.from('cards').delete().eq('id', id);
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
@@ -139,8 +145,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const diary = useMemo(() => buildDiary(cards), [cards]);
 
   const value = useMemo(
-    () => ({ session, loading, cards, profile, addCard, reviewCard, capturedToday, diary, signOut }),
-    [session, loading, cards, profile, addCard, reviewCard, capturedToday, diary, signOut],
+    () => ({ session, loading, cards, profile, addCard, reviewCard, deleteCard, capturedToday, diary, signOut }),
+    [session, loading, cards, profile, addCard, reviewCard, deleteCard, capturedToday, diary, signOut],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

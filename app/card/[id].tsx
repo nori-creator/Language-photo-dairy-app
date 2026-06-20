@@ -1,5 +1,5 @@
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useApp } from '@/store/AppStore';
 import { categoryById } from '@/data/categories';
 import { categoryIcon } from '@/lib/categoryIcon';
@@ -11,9 +11,24 @@ import { VocabCard } from '@/types';
 
 export default function CardDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { cards } = useApp();
+  const { cards, deleteCard } = useApp();
   const colors = useColors();
+  const router = useRouter();
   const card = cards.find((c) => c.id === id);
+
+  const confirmDelete = () => {
+    Alert.alert('カードを削除', 'このカードを削除しますか？', [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: '削除',
+        style: 'destructive',
+        onPress: () => {
+          if (id) deleteCard(id);
+          router.back();
+        },
+      },
+    ]);
+  };
 
   if (!card) {
     return (
@@ -31,7 +46,16 @@ export default function CardDetail() {
 
   return (
     <>
-      <Stack.Screen options={{ title: card.word }} />
+      <Stack.Screen
+        options={{
+          title: card.word,
+          headerRight: () => (
+            <PressableScale onPress={confirmDelete} haptic={false} style={styles.delete}>
+              <Icon name="trash-outline" size={22} color={colors.red} />
+            </PressableScale>
+          ),
+        }}
+      />
       <ScrollView
         style={{ backgroundColor: colors.systemGroupedBackground }}
         contentContainerStyle={styles.content}
@@ -150,4 +174,5 @@ const styles = StyleSheet.create({
   sectionLabel: { marginBottom: spacing.xs },
   meta: { gap: spacing.sm, marginTop: spacing.xs },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  delete: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });
