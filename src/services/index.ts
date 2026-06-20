@@ -1,6 +1,7 @@
 import { hasAiBackend } from '@/config';
-import { mockCutout, mockEnrich, mockIdentify, mockTts } from './mock';
+import { mockCutout, mockEnrich, mockIdentify } from './mock';
 import { geminiCutout, geminiEnrich, geminiIdentify } from './gemini';
+import { speechTts } from './speech';
 import { CutoutService, EnrichService, IdentifyService, TtsService } from './types';
 
 /**
@@ -23,7 +24,7 @@ export const services: {
   identify: hasAiBackend ? geminiIdentify : mockIdentify,
   cutout: hasAiBackend ? geminiCutout : mockCutout,
   enrich: hasAiBackend ? geminiEnrich : mockEnrich,
-  tts: mockTts,
+  tts: speechTts,
 };
 
 export * from './types';

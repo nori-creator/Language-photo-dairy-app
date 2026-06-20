@@ -38,6 +38,7 @@ export function StickerRevealOverlay({ visible, photo, sticker, word, reading, o
   const toCard = useSharedValue(0);
   const ring = useSharedValue(0);
   const label = useSharedValue(0);
+  const flash = useSharedValue(0);
   const out = useSharedValue(1);
 
   useEffect(() => {
@@ -59,10 +60,12 @@ export function StickerRevealOverlay({ visible, photo, sticker, word, reading, o
     // 2) Lift off the background.
     lift.value = withDelay(160, withTiming(1, timing.standard));
     timers.push(setTimeout(() => feedback.lift(), 180));
-    // 3) Settle onto the forming card + one accent ring pulse + label rise.
+    // 3) Settle onto the forming card + a screen-filling accent flash, an
+    //    expanding ring, and the label rising in.
     toCard.value = withDelay(620, withSpring(1, spring.bouncy));
     ring.value = withDelay(620, withSequence(withTiming(1, timing.micro), withTiming(0, timing.soft)));
-    label.value = withDelay(760, withSpring(1, spring.soft));
+    flash.value = withDelay(620, withSequence(withTiming(1, { duration: 150 }), withTiming(0, timing.soft)));
+    label.value = withDelay(780, withSpring(1, spring.soft));
     timers.push(setTimeout(() => feedback.success(), 640));
     // 4) Dismiss.
     timers.push(setTimeout(() => (out.value = withTiming(0, timing.standard)), 1700));
@@ -88,7 +91,8 @@ export function StickerRevealOverlay({ visible, photo, sticker, word, reading, o
   const subjectRadius = useAnimatedStyle(() => ({ borderRadius: 12 + lift.value * 16 }));
   const dimStyle = useAnimatedStyle(() => ({ opacity: lift.value * (hasCutout ? 0.6 : 0.25) }));
   const cutoutStyle = useAnimatedStyle(() => ({ opacity: lift.value }));
-  const ringStyle = useAnimatedStyle(() => ({ opacity: ring.value, transform: [{ scale: 1 + ring.value * 0.4 }] }));
+  const ringStyle = useAnimatedStyle(() => ({ opacity: ring.value * 0.85, transform: [{ scale: 1 + ring.value * 0.9 }] }));
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value * 0.22 }));
   const labelStyle = useAnimatedStyle(() => ({ opacity: label.value, transform: [{ translateY: (1 - label.value) * 16 }] }));
 
   if (!visible) return null;
@@ -97,6 +101,9 @@ export function StickerRevealOverlay({ visible, photo, sticker, word, reading, o
     <Modal transparent visible={visible} animationType="fade">
       <Animated.View style={[styles.scrim, scrimStyle]}>
         <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
+
+        {/* Screen-filling accent flash at the reward beat */}
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.blue }, flashStyle]} pointerEvents="none" />
 
         {/* Forming collection card */}
         <Animated.View style={[styles.card, { width: Math.min(width - 64, 320), backgroundColor: colors.secondarySystemGroupedBackground }, shadow.modal, cardStyle]} />

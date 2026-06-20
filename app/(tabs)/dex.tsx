@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/store/AppStore';
@@ -13,6 +13,7 @@ export default function DexScreen() {
   const { cards } = useApp();
   const colors = useColors();
   const router = useRouter();
+  const [filter, setFilter] = useState<string | null>(null);
 
   const byCategory = useMemo(() => {
     const map = new Map<string, VocabCard[]>();
@@ -22,6 +23,7 @@ export default function DexScreen() {
 
   const total = cards.length;
   const goal = CATEGORIES.reduce((n, c) => n + (c.targetWords?.length ?? 0), 0);
+  const shown = filter ? CATEGORIES.filter((c) => c.id === filter) : CATEGORIES;
 
   return (
     <ScrollView
@@ -38,7 +40,27 @@ export default function DexScreen() {
         <ProgressBar progress={goal ? total / goal : 0} style={{ marginTop: spacing.md }} />
       </Card>
 
-      {CATEGORIES.map((cat) => {
+      {/* Category filter */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chips}
+        style={styles.chipBar}
+      >
+        <Chip label="すべて" active={filter === null} onPress={() => setFilter(null)} colors={colors} />
+        {CATEGORIES.map((cat) => (
+          <Chip
+            key={cat.id}
+            label={cat.name}
+            icon={categoryIcon(cat.id)}
+            active={filter === cat.id}
+            onPress={() => setFilter(filter === cat.id ? null : cat.id)}
+            colors={colors}
+          />
+        ))}
+      </ScrollView>
+
+      {shown.map((cat) => {
         const owned = byCategory.get(cat.id) ?? [];
         const ownedWords = new Set(owned.map((c) => c.word));
         const locked = (cat.targetWords ?? []).filter((w) => !ownedWords.has(w));
@@ -83,8 +105,36 @@ export default function DexScreen() {
   );
 }
 
+function Chip({
+  label,
+  icon,
+  active,
+  onPress,
+  colors,
+}: {
+  label: string;
+  icon?: any;
+  active: boolean;
+  onPress: () => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  return (
+    <PressableScale
+      onPress={onPress}
+      haptic={false}
+      style={[styles.chip, { backgroundColor: active ? colors.blue : colors.secondarySystemGroupedBackground }]}
+    >
+      {icon && <Icon name={icon} size={15} color={active ? '#fff' : colors.secondaryLabel} />}
+      <AppText variant="subhead" color={active ? '#fff' : colors.label}>{label}</AppText>
+    </PressableScale>
+  );
+}
+
 const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
+  chipBar: { marginHorizontal: -spacing.lg },
+  chips: { paddingHorizontal: spacing.lg, gap: spacing.sm },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, height: 36, borderRadius: radius.full },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

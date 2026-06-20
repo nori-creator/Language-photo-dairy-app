@@ -32,19 +32,19 @@ const SWEEP = 64; // height of the laser band
 export function ScanOverlay({ height = 280, label = '解析中' }: Props) {
   const sweep = useSharedValue(0);
   const breathe = useSharedValue(0);
-  const ring = useSharedValue(1.25);
+  const ring = useSharedValue(0.95);
   const ringOpacity = useSharedValue(0);
   const dot = useSharedValue(0);
   const [dots, setDots] = useState('');
 
   useEffect(() => {
-    // Continuous downward scan (snaps back to the top each pass).
-    sweep.value = withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.quad) }), -1, false);
-    breathe.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true);
-    dot.value = withRepeat(withTiming(1, { duration: 700, easing: Easing.inOut(Easing.sin) }), -1, true);
-    // Focus ring snaps in once, then holds.
-    ringOpacity.value = withSequence(withTiming(1, { duration: 350 }), withDelay(400, withTiming(0.5, { duration: 600 })));
-    ring.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) });
+    // Brisk continuous downward scan (snaps back to the top each pass).
+    sweep.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }), -1, false);
+    breathe.value = withRepeat(withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.sin) }), -1, true);
+    dot.value = withRepeat(withTiming(1, { duration: 560, easing: Easing.inOut(Easing.sin) }), -1, true);
+    // Focus ring keeps breathing — feels like it's actively locking on.
+    ringOpacity.value = withTiming(0.9, { duration: 300 });
+    ring.value = withRepeat(withTiming(1.06, { duration: 900, easing: Easing.inOut(Easing.sin) }), -1, true);
   }, [height]);
 
   // Animated "…" so the label reads as active processing.

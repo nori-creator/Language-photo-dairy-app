@@ -73,13 +73,17 @@ async function identify(body: any) {
   if (!imageBase64) return json({ error: 'imageBase64 required' }, 400);
 
   const prompt =
-    `You are a language-learning assistant. Look at the photo and identify the single most ` +
-    `prominent, learnable object. Respond with ONLY a JSON array of up to 3 candidate objects, ` +
-    `ordered by confidence descending. Each object has exactly these keys: ` +
-    `"word" (in target language "${target}"), "reading" (pinyin/kana/romanization), ` +
-    `"nativeTranslation" (in native language "${native}"), "emoji" (one representative emoji), ` +
+    `You are a Traditional Chinese (Taiwan Mandarin, 台灣華語) vocabulary assistant for a ` +
+    `Japanese learner. Look at the photo and identify the single most prominent, learnable object. ` +
+    `Respond with ONLY a JSON array of up to 3 candidate objects, ordered by confidence descending. ` +
+    `Each object has exactly these keys: ` +
+    `"word" (the everyday term in TRADITIONAL CHINESE as used in TAIWAN — NEVER Japanese, NEVER Simplified Chinese), ` +
+    `"reading" (Zhuyin / 注音符號 with tone marks, e.g. "ㄅㄧˇ"), ` +
+    `"nativeTranslation" (in Japanese), ` +
+    `"emoji" (one representative emoji), ` +
     `"categoryId" (one of: ${CATEGORY_IDS.join(', ')}; use "object" if unsure), ` +
-    `"confidence" (number 0..1). No markdown, no extra text.`;
+    `"confidence" (number 0..1). ` +
+    `Output strictly Taiwan Mandarin — do NOT output Japanese words or kana readings. No markdown, no extra text.`;
 
   const candidates = await callGemini(
     [{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }],
@@ -93,12 +97,18 @@ async function enrich(body: any) {
   if (!word) return json({ error: 'word required' }, 400);
 
   const prompt =
-    `Build a vocabulary flash-card back for the word "${word}" in language "${target}", ` +
-    `with all explanations written in the native language "${native}". ` +
-    `Respond with ONLY a JSON object with these keys: "reading", "ipa", "meaning", ` +
-    `"partOfSpeech", "level" (CEFR/HSK-style), "examples" (array of {"text","translation"}; ` +
-    `text in ${target}, translation in ${native}; give 2), "collocations" (array of strings), ` +
-    `"synonyms" (array), "antonyms" (array), "etymology" (string), "note" (one memorable line). ` +
+    `Build a vocabulary flash-card for the Traditional Chinese (Taiwan Mandarin, 台灣華語) word "${word}". ` +
+    `Treat it strictly as Taiwan Mandarin — NEVER as Japanese. Write all explanations in Japanese. ` +
+    `Respond with ONLY a JSON object with these keys: ` +
+    `"reading" (Zhuyin / 注音符號 with tone marks, e.g. "ㄅㄧˇ" — NOT pinyin, NOT kana), ` +
+    `"ipa" (empty string ""), ` +
+    `"meaning" (in Japanese), ` +
+    `"partOfSpeech" (in Japanese, e.g. 名詞/動詞/形容詞), ` +
+    `"level" (TOCFL level per Taiwan 教育部・華語文能力測驗; one of: 準備級, 入門級, 基礎級, 進階級, 高階級, 流利級), ` +
+    `"examples" (array of {"text","translation"}; text in Traditional Chinese as used in Taiwan, ` +
+    `translation in Japanese; give 2), "collocations" (array of Traditional Chinese strings), ` +
+    `"synonyms" (array, Traditional Chinese), "antonyms" (array, Traditional Chinese), ` +
+    `"etymology" (string in Japanese), "note" (one memorable line in Japanese). ` +
     `Use empty arrays/strings when not applicable. No markdown, no extra text.`;
 
   const fields = await callGemini([{ text: prompt }], body.model);
