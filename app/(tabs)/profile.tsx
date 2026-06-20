@@ -27,11 +27,11 @@ export default function ProfileScreen() {
     >
       {/* Stats */}
       <Card style={styles.statRow}>
-        <Stat icon="flame" value={`${profile.streak}`} label="連続日数" colors={colors} />
+        <Stat icon="flame" tint={colors.orange} value={`${profile.streak}`} label="連続日数" colors={colors} />
         <Divider colors={colors} />
-        <Stat icon="albums" value={`${stats.total}`} label="集めた単語" colors={colors} />
+        <Stat icon="albums" tint={colors.blue} value={`${stats.total}`} label="集めた単語" colors={colors} />
         <Divider colors={colors} />
-        <Stat icon="sparkles" value={`${stats.learned}`} label="習得済み" colors={colors} />
+        <Stat icon="sparkles" tint={colors.green} value={`${stats.learned}`} label="習得済み" colors={colors} />
       </Card>
 
       {/* Certification goal */}
@@ -71,11 +71,13 @@ export default function ProfileScreen() {
   );
 }
 
-function Stat({ icon, value, label, colors }: { icon: keyof typeof Ionicons.glyphMap; value: string; label: string; colors: ReturnType<typeof useColors> }) {
+function Stat({ icon, tint, value, label, colors }: { icon: keyof typeof Ionicons.glyphMap; tint: string; value: string; label: string; colors: ReturnType<typeof useColors> }) {
   return (
     <View style={styles.stat}>
-      <Icon name={icon} size={22} color={colors.secondaryLabel} />
-      <AppText variant="title2" style={{ marginTop: spacing.xs }}>{value}</AppText>
+      <View style={[styles.statIcon, { backgroundColor: tint + '22' }]}>
+        <Icon name={icon} size={20} color={tint} />
+      </View>
+      <AppText variant="title2" style={{ marginTop: spacing.xs }} color={tint}>{value}</AppText>
       <AppText variant="caption1" color={colors.secondaryLabel}>{label}</AppText>
     </View>
   );
@@ -89,5 +91,6 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   statRow: { flexDirection: 'row', alignItems: 'center' },
   stat: { flex: 1, alignItems: 'center', gap: 2 },
+  statIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });

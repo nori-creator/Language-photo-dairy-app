@@ -3,6 +3,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useApp } from '@/store/AppStore';
 import { categoryById } from '@/data/categories';
 import { categoryIcon } from '@/lib/categoryIcon';
+import { categoryColor } from '@/lib/categoryColor';
 import { services } from '@/services';
 import { feedback } from '@/lib/feedback';
 import { radius, shadow, spacing, useColors } from '@/theme';
@@ -32,6 +33,7 @@ export default function CardDetail() {
 
   const date = new Date(card.capturedAt);
   const tintBlue = colors.blue + '14'; // deep, translucent blue
+  const catColor = colors[categoryColor(card.categoryId)] as string;
   const speak = () => {
     feedback.tap();
     services.tts.speak({ text: card.word, target: card.targetLanguage }).catch(() => {});
@@ -72,6 +74,7 @@ export default function CardDetail() {
           {!!card.partOfSpeech && card.partOfSpeech !== '—' && (
             <Badge text={card.partOfSpeech} tint={colors.fill} color={colors.secondaryLabel} />
           )}
+          <Badge text={categoryById(card.categoryId)?.name ?? ''} tint={catColor + '22'} color={catColor} />
         </View>
 
         {/* Meaning (tinted blue) */}
@@ -111,7 +114,7 @@ export default function CardDetail() {
 
         {/* Meta */}
         <View style={styles.meta}>
-          <MetaRow icon={categoryIcon(card.categoryId)} text={categoryById(card.categoryId)?.name ?? '—'} colors={colors} />
+          <MetaRow icon={categoryIcon(card.categoryId)} text={categoryById(card.categoryId)?.name ?? '—'} colors={colors} tint={catColor} />
           <MetaRow icon="calendar-outline" text={`${date.getMonth() + 1}月${date.getDate()}日に取得`} colors={colors} />
           {!!card.location?.name && <MetaRow icon="location-outline" text={card.location.name} colors={colors} />}
         </View>
@@ -137,10 +140,10 @@ function Section({ title, colors, children }: { title: string; colors: ReturnTyp
   );
 }
 
-function MetaRow({ icon, text, colors }: { icon: any; text: string; colors: ReturnType<typeof useColors> }) {
+function MetaRow({ icon, text, colors, tint }: { icon: any; text: string; colors: ReturnType<typeof useColors>; tint?: string }) {
   return (
     <View style={styles.metaRow}>
-      <Icon name={icon} size={18} color={colors.secondaryLabel} />
+      <Icon name={icon} size={18} color={tint ?? colors.secondaryLabel} />
       <AppText variant="subhead" color={colors.secondaryLabel}>{text}</AppText>
     </View>
   );

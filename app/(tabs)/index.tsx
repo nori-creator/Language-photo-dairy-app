@@ -4,6 +4,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/store/AppStore';
 import { blurAmount } from '@/lib/srs';
+import { categoryColor } from '@/lib/categoryColor';
 import { radius, shadow, spacing, useColors } from '@/theme';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { AppText, CutoutSticker, Icon, PressableScale } from '@/components';
@@ -43,8 +44,8 @@ export default function DiaryScreen() {
       contentContainerStyle={styles.content}
     >
       <View style={styles.streak}>
-        <Icon name="flame" size={16} color={colors.label} />
-        <AppText variant="subhead">{profile.streak}日連続</AppText>
+        <Icon name="flame" size={17} color={colors.orange} />
+        <AppText variant="subhead" color={colors.orange}>{profile.streak}日連続</AppText>
         <AppText variant="footnote" color={colors.secondaryLabel}>· 毎日1枚で記録を伸ばそう</AppText>
       </View>
 
@@ -91,7 +92,9 @@ export default function DiaryScreen() {
                     <View style={styles.labelWrap}>
                       <AppText variant="headline" color={INK} numberOfLines={1} style={styles.word}>{c.word}</AppText>
                       {!!c.reading && (
-                        <AppText variant="caption1" color="#6b6b70" numberOfLines={1}>{c.reading}</AppText>
+                        <AppText variant="caption1" color={colors[categoryColor(c.categoryId)] as string} numberOfLines={1}>
+                          {c.reading}
+                        </AppText>
                       )}
                     </View>
                   </PressableScale>
