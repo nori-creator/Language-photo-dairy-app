@@ -1,6 +1,9 @@
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useApp } from '@/store/AppStore';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { categoryById } from '@/data/categories';
 import { categoryIcon } from '@/lib/categoryIcon';
 import { categoryColor } from '@/lib/categoryColor';
@@ -56,10 +59,8 @@ export default function CardDetail() {
         }}
       />
       <ScrollView style={{ backgroundColor: colors.systemGroupedBackground }} contentContainerStyle={styles.content}>
-        {/* Hero cut-out */}
-        <View style={[styles.hero, { backgroundColor: colors.secondarySystemGroupedBackground }, shadow.card]}>
-          <CutoutSticker uri={card.sticker} size={240} />
-        </View>
+        {/* Hero: tap to flip between cut-out sticker and the "with me" selfie */}
+        <FlipHero sticker={card.sticker} selfie={card.selfPhoto ?? null} colors={colors} />
 
         {/* Title + big floating speak button */}
         <View style={styles.titleRow}>
@@ -140,6 +141,45 @@ export default function CardDetail() {
   );
 }
 
+/** Hero that flips between the cut-out sticker (front) and the selfie (back). */
+function FlipHero({ sticker, selfie, colors }: { sticker: string; selfie: string | null; colors: ReturnType<typeof useColors> }) {
+  const reduced = useReducedMotion();
+  const spin = useSharedValue(0);
+  const canFlip = !!selfie;
+  const flip = () => {
+    if (!canFlip) return;
+    feedback.tap();
+    spin.value = withTiming(spin.value === 0 ? 1 : 0, { duration: reduced ? 0 : 450 });
+  };
+  const front = useAnimatedStyle(() => ({
+    transform: [{ perspective: 1000 }, { rotateY: `${interpolate(spin.value, [0, 1], [0, 180])}deg` }],
+    backfaceVisibility: 'hidden',
+  }));
+  const back = useAnimatedStyle(() => ({
+    transform: [{ perspective: 1000 }, { rotateY: `${interpolate(spin.value, [0, 1], [180, 360])}deg` }],
+    backfaceVisibility: 'hidden',
+  }));
+  const surface = { backgroundColor: colors.secondarySystemGroupedBackground };
+  return (
+    <PressableScale onPress={flip} haptic={false}>
+      <View style={styles.heroStage}>
+        <Animated.View style={[styles.hero, surface, shadow.card, front]}>
+          <CutoutSticker uri={sticker} size={240} />
+          {canFlip && (
+            <View style={styles.flipHint}>
+              <Icon name="sync-outline" size={13} color={colors.secondaryLabel} />
+              <AppText variant="caption1" color={colors.secondaryLabel}>タップで自撮り</AppText>
+            </View>
+          )}
+        </Animated.View>
+        <Animated.View style={[styles.hero, styles.heroBack, surface, shadow.card, back]}>
+          {selfie && <Image source={{ uri: selfie }} style={styles.selfieFull} contentFit="cover" />}
+        </Animated.View>
+      </View>
+    </PressableScale>
+  );
+}
+
 function Badge({ text, tint, color }: { text: string; tint: string; color: string }) {
   return (
     <View style={[styles.badge, { backgroundColor: tint }]}>
@@ -181,7 +221,11 @@ function MetaRow({ icon, text, colors, tint }: { icon: any; text: string; colors
 const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  hero: { height: 300, borderRadius: radius.xxl, alignItems: 'center', justifyContent: 'center' },
+  heroStage: { height: 300 },
+  hero: { ...StyleSheet.absoluteFillObject, borderRadius: radius.xxl, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  heroBack: {},
+  selfieFull: { width: '100%', height: '100%' },
+  flipHint: { position: 'absolute', bottom: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   word: { fontWeight: '800' as const },
   speak: {

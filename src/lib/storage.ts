@@ -17,7 +17,7 @@ function rawBase64(value: string): string {
 export async function uploadImage(
   userId: string,
   base64: string,
-  kind: 'photo' | 'sticker',
+  kind: 'photo' | 'sticker' | 'self',
   contentType = 'image/jpeg',
 ): Promise<string> {
   const ext = contentType.includes('png') ? 'png' : 'jpg';

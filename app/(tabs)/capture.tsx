@@ -35,6 +35,7 @@ export default function CaptureScreen() {
   const [shotBase64, setShotBase64] = useState<string | undefined>(undefined);
   const [manual, setManual] = useState('');
   const [note, setNote] = useState('');
+  const [selfie, setSelfie] = useState<{ uri: string; base64?: string } | null>(null);
   const [reveal, setReveal] = useState<Reveal | null>(null);
 
   // Prefetched work so the post-confirm wait is hidden behind the reveal.
@@ -104,13 +105,39 @@ export default function CaptureScreen() {
     }
   };
 
+  /** Open the front camera for an optional "with me" selfie. */
+  const addSelfie = async () => {
+    feedback.tap();
+    const res = await ImagePicker.launchCameraAsync({
+      cameraType: ImagePicker.CameraType.front,
+      quality: 0.6,
+      base64: true,
+    });
+    if (!res.canceled && res.assets[0]?.uri) {
+      setSelfie({ uri: res.assets[0].uri, base64: res.assets[0].base64 ?? undefined });
+    }
+  };
+
   /** Persist the card in the background; the reveal overlay masks the latency. */
-  const buildCard = async (c: IdentifyCandidate, sticker: string, comment: string) => {
+  const buildCard = async (
+    c: IdentifyCandidate,
+    sticker: string,
+    comment: string,
+    self: { uri: string; base64?: string } | null,
+  ) => {
     const [fields, photoUrl, location] = await Promise.all([
       services.enrich.enrich({ word: c.word, target: profile.targetLanguage, native: profile.nativeLanguage }),
       photoUploadRef.current,
       locationRef.current,
     ]);
+    let selfUrl: string | null = self?.uri ?? null;
+    if (userId && self?.base64) {
+      try {
+        selfUrl = await uploadImage(userId, self.base64, 'self', 'image/jpeg');
+      } catch {
+        selfUrl = self.uri;
+      }
+    }
     let stickerUrl = sticker;
     if (userId) {
       try {
@@ -136,6 +163,7 @@ export default function CaptureScreen() {
       location: location ?? undefined,
       userComment: comment.trim() || null,
       source: sourceRef.current,
+      selfPhoto: selfUrl,
     };
     await addCard(card);
   };
@@ -143,14 +171,16 @@ export default function CaptureScreen() {
   const confirm = async (c: IdentifyCandidate) => {
     feedback.tap();
     const comment = note;
+    const self = selfie;
     setNote('');
+    setSelfie(null);
     // Show the reveal immediately (sticker upgrades to the cut-out when ready).
     setReveal({ photo: shotPhoto, sticker: shotPhoto, word: c.word, reading: c.reading });
     setPhase('revealing');
     const cut = await cutoutRef.current;
     const sticker = cut?.sticker ?? shotPhoto;
     if (sticker !== shotPhoto) setReveal((r) => (r ? { ...r, sticker } : r));
-    buildCard(c, sticker, comment);
+    buildCard(c, sticker, comment, self);
   };
 
   const confirmManual = () => {
@@ -164,6 +194,7 @@ export default function CaptureScreen() {
     setPhase('idle');
     setCandidates([]);
     setNote('');
+    setSelfie(null);
   };
 
   // ── Full-screen camera / scanner ─────────────────────────────────────────
@@ -274,7 +305,22 @@ export default function CaptureScreen() {
             style={[styles.input, { backgroundColor: colors.secondarySystemGroupedBackground, color: colors.label, marginBottom: spacing.sm }]}
           />
 
-          <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginTop: spacing.sm, marginBottom: spacing.xs }}>
+          {/* Optional "with me" selfie */}
+          <PressableScale onPress={addSelfie} style={[styles.selfieRow, { backgroundColor: colors.secondarySystemGroupedBackground }]}>
+            {selfie ? (
+              <Image source={{ uri: selfie.uri }} style={styles.selfieThumb} contentFit="cover" />
+            ) : (
+              <View style={[styles.selfieThumb, styles.selfieEmpty, { borderColor: colors.separator }]}>
+                <Icon name="person-add-outline" size={20} color={colors.secondaryLabel} />
+              </View>
+            )}
+            <AppText variant="subhead" color={colors.label} style={{ flex: 1 }}>
+              {selfie ? '自撮りを追加しました（タップで撮り直し）' : '自分も一緒に撮る（任意）'}
+            </AppText>
+            {selfie && <Icon name="checkmark-circle" size={20} color={colors.green} />}
+          </PressableScale>
+
+          <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginTop: spacing.lg, marginBottom: spacing.xs }}>
             候補にない場合は手動入力
           </AppText>
           <View style={styles.manualRow}>
@@ -335,4 +381,7 @@ const styles = StyleSheet.create({
   },
   manualRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   input: { flex: 1, height: 44, borderRadius: radius.md, paddingHorizontal: spacing.md, fontSize: 17 },
+  selfieRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.sm, borderRadius: radius.md },
+  selfieThumb: { width: 40, height: 40, borderRadius: 20 },
+  selfieEmpty: { alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth },
 });
