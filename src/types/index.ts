@@ -46,6 +46,12 @@ export interface VocabCard {
   // --- Capture metadata ---
   capturedAt: string; // ISO date
   location?: { latitude: number; longitude: number; name?: string };
+  /** A large "with me" selfie shown on the card back (optional, private by default). */
+  selfPhoto?: string | null;
+  /** The learner's one-line note at capture — feeds the AI diary. */
+  userComment?: string | null;
+  /** How the card was created. */
+  source?: 'object' | 'selfie' | 'library' | 'ocr';
 }
 
 export interface SrsState {

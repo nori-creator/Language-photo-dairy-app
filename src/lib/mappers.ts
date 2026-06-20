@@ -33,6 +33,9 @@ export function rowToCard(r: any): VocabCard {
     location: r.lat != null && r.lng != null
       ? { latitude: r.lat, longitude: r.lng, name: r.location_name ?? undefined }
       : undefined,
+    selfPhoto: r.self_photo_url ?? null,
+    userComment: r.user_comment ?? null,
+    source: r.source ?? 'object',
   };
 }
 
@@ -66,6 +69,9 @@ export function cardToRow(c: VocabCard, userId: string) {
     lat: c.location?.latitude ?? null,
     lng: c.location?.longitude ?? null,
     location_name: c.location?.name ?? null,
+    self_photo_url: c.selfPhoto ?? null,
+    user_comment: c.userComment ?? null,
+    source: c.source ?? 'object',
   };
 }
 

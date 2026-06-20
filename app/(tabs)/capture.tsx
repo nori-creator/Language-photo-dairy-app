@@ -10,6 +10,7 @@ import { services } from '@/services';
 import { canCapture, remainingCaptures } from '@/lib/quota';
 import { initialSrs } from '@/lib/srs';
 import { uploadImage } from '@/lib/storage';
+import { getCaptureLocation, type CaptureLocation } from '@/lib/location';
 import { feedback } from '@/lib/feedback';
 import { radius, spacing, useColors } from '@/theme';
 import { AppText, Icon, PrimaryButton, PressableScale, ScanOverlay, StickerRevealOverlay } from '@/components';
@@ -33,11 +34,14 @@ export default function CaptureScreen() {
   const [shotPhoto, setShotPhoto] = useState('');
   const [shotBase64, setShotBase64] = useState<string | undefined>(undefined);
   const [manual, setManual] = useState('');
+  const [note, setNote] = useState('');
   const [reveal, setReveal] = useState<Reveal | null>(null);
 
   // Prefetched work so the post-confirm wait is hidden behind the reveal.
   const cutoutRef = useRef<Promise<{ sticker: string }> | null>(null);
   const photoUploadRef = useRef<Promise<string | null>>(Promise.resolve(null));
+  const locationRef = useRef<Promise<CaptureLocation | null>>(Promise.resolve(null));
+  const sourceRef = useRef<'object' | 'library' | 'ocr'>('object');
 
   const remaining = remainingCaptures(profile.plan, capturedToday);
   const allowed = canCapture(profile.plan, capturedToday);
@@ -52,9 +56,10 @@ export default function CaptureScreen() {
   const quotaText = profile.plan === 'pro' ? 'Pro · 撮り放題' : `今日あと ${remaining} 枚`;
 
   /** Capture → kick off identify (foreground) + cutout & photo upload (background). */
-  const shoot = async (photo: string, imageBase64?: string) => {
+  const shoot = async (photo: string, imageBase64?: string, source: 'object' | 'library' | 'ocr' = 'object') => {
     if (!allowed) return;
     feedback.capture();
+    sourceRef.current = source;
     setShotPhoto(photo);
     setShotBase64(imageBase64);
     setPhase('analyzing');
@@ -63,6 +68,8 @@ export default function CaptureScreen() {
     cutoutRef.current = services.cutout.cutout({ photo, imageBase64 }).catch(() => ({ sticker: photo }));
     photoUploadRef.current =
       userId && imageBase64 ? uploadImage(userId, imageBase64, 'photo', 'image/jpeg').catch(() => null) : Promise.resolve(null);
+    // Record where this was captured (foreground, best-effort).
+    locationRef.current = getCaptureLocation();
 
     try {
       const results = await services.identify.identify({
@@ -93,15 +100,16 @@ export default function CaptureScreen() {
     if (!allowed) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6, base64: true });
     if (!result.canceled && result.assets[0]?.uri) {
-      shoot(result.assets[0].uri, result.assets[0].base64 ?? undefined);
+      shoot(result.assets[0].uri, result.assets[0].base64 ?? undefined, 'library');
     }
   };
 
   /** Persist the card in the background; the reveal overlay masks the latency. */
-  const buildCard = async (c: IdentifyCandidate, sticker: string) => {
-    const [fields, photoUrl] = await Promise.all([
+  const buildCard = async (c: IdentifyCandidate, sticker: string, comment: string) => {
+    const [fields, photoUrl, location] = await Promise.all([
       services.enrich.enrich({ word: c.word, target: profile.targetLanguage, native: profile.nativeLanguage }),
       photoUploadRef.current,
+      locationRef.current,
     ]);
     let stickerUrl = sticker;
     if (userId) {
@@ -125,19 +133,24 @@ export default function CaptureScreen() {
       audioUri: null,
       srs: initialSrs(),
       capturedAt: new Date().toISOString(),
+      location: location ?? undefined,
+      userComment: comment.trim() || null,
+      source: sourceRef.current,
     };
     await addCard(card);
   };
 
   const confirm = async (c: IdentifyCandidate) => {
     feedback.tap();
+    const comment = note;
+    setNote('');
     // Show the reveal immediately (sticker upgrades to the cut-out when ready).
     setReveal({ photo: shotPhoto, sticker: shotPhoto, word: c.word, reading: c.reading });
     setPhase('revealing');
     const cut = await cutoutRef.current;
     const sticker = cut?.sticker ?? shotPhoto;
     if (sticker !== shotPhoto) setReveal((r) => (r ? { ...r, sticker } : r));
-    buildCard(c, sticker);
+    buildCard(c, sticker, comment);
   };
 
   const confirmManual = () => {
@@ -150,6 +163,7 @@ export default function CaptureScreen() {
   const reset = () => {
     setPhase('idle');
     setCandidates([]);
+    setNote('');
   };
 
   // ── Full-screen camera / scanner ─────────────────────────────────────────
@@ -250,6 +264,17 @@ export default function CaptureScreen() {
           ))}
 
           <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginTop: spacing.lg, marginBottom: spacing.xs }}>
+            ひとことメモ（任意・あとで日記になります）
+          </AppText>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="例：朝ごはんで見つけた"
+            placeholderTextColor={colors.tertiaryLabel}
+            style={[styles.input, { backgroundColor: colors.secondarySystemGroupedBackground, color: colors.label, marginBottom: spacing.sm }]}
+          />
+
+          <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginTop: spacing.sm, marginBottom: spacing.xs }}>
             候補にない場合は手動入力
           </AppText>
           <View style={styles.manualRow}>

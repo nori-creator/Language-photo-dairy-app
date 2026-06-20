@@ -34,6 +34,12 @@
         {
           "photosPermission": "写真から単語カードを作成するためにライブラリにアクセスします。"
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "撮影した場所を記録し、思い出として振り返るために使用します。"
+        }
       ]
     ],
     "experiments": {
