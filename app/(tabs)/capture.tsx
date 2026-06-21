@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,6 +12,7 @@ import { canCapture, remainingCaptures } from '@/lib/quota';
 import { initialSrs } from '@/lib/srs';
 import { uploadImage } from '@/lib/storage';
 import { getCaptureLocation, type CaptureLocation } from '@/lib/location';
+import { enqueueCapture } from '@/lib/captureQueue';
 import { feedback } from '@/lib/feedback';
 import { radius, spacing, useColors } from '@/theme';
 import { AppText, Icon, PrimaryButton, PressableScale, ScanOverlay, StickerRevealOverlay } from '@/components';
@@ -60,6 +62,27 @@ export default function CaptureScreen() {
   /** Capture → kick off identify (foreground) + cutout & photo upload (background). */
   const shoot = async (photo: string, imageBase64?: string, source: 'object' | 'library' | 'ocr' = 'object') => {
     if (!allowed) return;
+
+    // Offline → save to the queue; it stickerizes automatically once back online.
+    const net = await NetInfo.fetch();
+    if (!net.isConnected && imageBase64 && userId) {
+      feedback.capture();
+      const loc = await getCaptureLocation();
+      await enqueueCapture({
+        id: `q_${Date.now()}`,
+        photoBase64: imageBase64,
+        source,
+        selfieBase64: null,
+        note: null,
+        location: loc,
+        targetLanguage: profile.targetLanguage,
+        nativeLanguage: profile.nativeLanguage,
+        createdAt: new Date().toISOString(),
+      });
+      Alert.alert('圏外で保存しました', '通信が戻ったら自動でカードになります。');
+      return;
+    }
+
     feedback.capture();
     sourceRef.current = source;
     setShotPhoto(photo);

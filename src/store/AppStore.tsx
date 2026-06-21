@@ -1,10 +1,14 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { DiaryEntry, Profile, VocabCard } from '@/types';
+import NetInfo from '@react-native-community/netinfo';
+import { DiaryEntry, LanguageCode, Profile, VocabCard } from '@/types';
 import { DEFAULT_PROFILE } from '@/data/seed';
-import { Recall, review } from '@/lib/srs';
+import { Recall, initialSrs, review } from '@/lib/srs';
 import { dayKey, updateStreak } from '@/lib/streak';
 import { supabase } from '@/lib/supabase';
+import { services } from '@/services';
+import { uploadImage } from '@/lib/storage';
+import { getQueue, removeFromQueue } from '@/lib/captureQueue';
 import { cardToRow, profileToRow, rowToCard, rowToProfile } from '@/lib/mappers';
 
 interface AppState {
@@ -133,6 +137,81 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCards((prev) => prev.filter((c) => c.id !== id));
     await supabase.from('cards').delete().eq('id', id);
   }, []);
+
+  // ── Offline capture queue: stickerize pending captures once back online ────
+  const processing = useRef(false);
+  const processQueue = useCallback(async () => {
+    const userId = session?.user.id;
+    if (!userId || processing.current) return;
+    processing.current = true;
+    try {
+      const queue = await getQueue();
+      for (const item of queue) {
+        try {
+          const candidates = await services.identify.identify({
+            photo: '',
+            imageBase64: item.photoBase64,
+            target: item.targetLanguage as LanguageCode,
+            native: item.nativeLanguage as LanguageCode,
+            mode: item.source === 'ocr' ? 'ocr' : 'object',
+          });
+          const top = candidates[0];
+          if (!top) {
+            await removeFromQueue(item.id); // nothing detectable — drop it
+            continue;
+          }
+          const [{ sticker }, fields, photoUrl] = await Promise.all([
+            item.source === 'ocr'
+              ? Promise.resolve({ sticker: '' })
+              : services.cutout.cutout({ photo: '', imageBase64: item.photoBase64 }).catch(() => ({ sticker: '' })),
+            services.enrich.enrich({ word: top.word, target: item.targetLanguage as LanguageCode, native: item.nativeLanguage as LanguageCode }),
+            uploadImage(userId, item.photoBase64, 'photo', 'image/jpeg').catch(() => null),
+          ]);
+          let stickerUrl = photoUrl ?? '';
+          if (sticker.startsWith('data:')) {
+            stickerUrl = await uploadImage(userId, sticker, 'sticker', 'image/png').catch(() => photoUrl ?? '');
+          }
+          let selfUrl: string | null = null;
+          if (item.selfieBase64) selfUrl = await uploadImage(userId, item.selfieBase64, 'self', 'image/jpeg').catch(() => null);
+
+          const card: VocabCard = {
+            id: `c_${Date.now()}`,
+            sticker: stickerUrl,
+            photo: photoUrl ?? '',
+            targetLanguage: item.targetLanguage as LanguageCode,
+            word: top.word,
+            categoryId: top.categoryId,
+            ...fields,
+            reading: fields.reading || top.reading,
+            audioUri: null,
+            srs: initialSrs(),
+            capturedAt: item.createdAt,
+            location: item.location ?? undefined,
+            userComment: item.note ?? null,
+            source: item.source,
+            selfPhoto: selfUrl,
+          };
+          await addCard(card);
+          await removeFromQueue(item.id);
+        } catch {
+          // Likely still offline / transient — stop and retry next time.
+          break;
+        }
+      }
+    } finally {
+      processing.current = false;
+    }
+  }, [session?.user.id, addCard]);
+
+  // Drain the queue on login and whenever connectivity returns.
+  useEffect(() => {
+    if (!session?.user.id) return;
+    processQueue();
+    const unsub = NetInfo.addEventListener((s) => {
+      if (s.isConnected) processQueue();
+    });
+    return () => unsub();
+  }, [session?.user.id, processQueue]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
