@@ -69,10 +69,10 @@ async function callGemini(parts: any[], model = GEMINI_MODEL): Promise<any> {
 }
 
 async function identify(body: any) {
-  const { imageBase64, target, native } = body;
+  const { imageBase64, mode } = body;
   if (!imageBase64) return json({ error: 'imageBase64 required' }, 400);
 
-  const prompt =
+  const objectPrompt =
     `You are a Traditional Chinese (Taiwan Mandarin, 台灣華語) vocabulary assistant for a ` +
     `Japanese learner. Look at the photo and identify the most prominent, learnable objects. ` +
     `Respond with ONLY a JSON array of up to 5 candidate objects, ordered by confidence descending. ` +
@@ -86,8 +86,18 @@ async function identify(body: any) {
     `"confidence" (number 0..1). ` +
     `Output strictly Taiwan Mandarin — do NOT output Japanese words or kana readings. No markdown, no extra text.`;
 
+  const ocrPrompt =
+    `You are a Taiwan Mandarin (台灣華語) reading assistant for a Japanese learner. Read the ` +
+    `Traditional Chinese text visible in this photo (sign/menu/book/label) and extract up to 6 USEFUL ` +
+    `vocabulary words or short phrases a learner would save. Respond with ONLY a JSON array, ordered by usefulness. ` +
+    `Each item has exactly these keys: ` +
+    `"word" (the word/phrase exactly as written, TRADITIONAL CHINESE as used in TAIWAN — never Simplified, never Japanese), ` +
+    `"reading" (Zhuyin / 注音符號 with tone marks), "nativeTranslation" (in Japanese), ` +
+    `"emoji" (one representative emoji), "categoryId" (one of: ${CATEGORY_IDS.join(', ')}; use "sign" for signage else best fit), ` +
+    `"confidence" (number 0..1). Ignore English, numbers, prices, and pure punctuation. No markdown, no extra text.`;
+
   const candidates = await callGemini(
-    [{ text: prompt }, { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }],
+    [{ text: mode === 'ocr' ? ocrPrompt : objectPrompt }, { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }],
     body.model,
   );
   return json({ candidates: Array.isArray(candidates) ? candidates : [] });

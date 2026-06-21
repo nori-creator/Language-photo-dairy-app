@@ -17,6 +17,8 @@ export interface IdentifyService {
     imageBase64?: string;
     target: LanguageCode;
     native: LanguageCode;
+    /** 'object' = detect things in the scene; 'ocr' = read Chinese text. */
+    mode?: 'object' | 'ocr';
   }): Promise<IdentifyCandidate[]>;
 }
 

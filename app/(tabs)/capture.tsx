@@ -36,6 +36,7 @@ export default function CaptureScreen() {
   const [manual, setManual] = useState('');
   const [note, setNote] = useState('');
   const [selfie, setSelfie] = useState<{ uri: string; base64?: string } | null>(null);
+  const [captureMode, setCaptureMode] = useState<'object' | 'text'>('object');
   const [reveal, setReveal] = useState<Reveal | null>(null);
 
   // Prefetched work so the post-confirm wait is hidden behind the reveal.
@@ -65,8 +66,12 @@ export default function CaptureScreen() {
     setShotBase64(imageBase64);
     setPhase('analyzing');
 
-    // Prefetch the slow bits now (independent of the chosen word).
-    cutoutRef.current = services.cutout.cutout({ photo, imageBase64 }).catch(() => ({ sticker: photo }));
+    // Prefetch the slow bits now (independent of the chosen word). Text mode
+    // skips cut-out (a sign/menu shouldn't be background-removed).
+    cutoutRef.current =
+      source === 'ocr'
+        ? Promise.resolve({ sticker: photo })
+        : services.cutout.cutout({ photo, imageBase64 }).catch(() => ({ sticker: photo }));
     photoUploadRef.current =
       userId && imageBase64 ? uploadImage(userId, imageBase64, 'photo', 'image/jpeg').catch(() => null) : Promise.resolve(null);
     // Record where this was captured (foreground, best-effort).
@@ -78,6 +83,7 @@ export default function CaptureScreen() {
         imageBase64,
         target: profile.targetLanguage,
         native: profile.nativeLanguage,
+        mode: source === 'ocr' ? 'ocr' : 'object',
       });
       setCandidates(results);
       setPhase('confirm');
@@ -91,7 +97,7 @@ export default function CaptureScreen() {
     if (!cameraRef.current || !allowed) return;
     try {
       const pic = await cameraRef.current.takePictureAsync({ quality: 0.6, base64: true });
-      if (pic?.uri) shoot(pic.uri, pic.base64);
+      if (pic?.uri) shoot(pic.uri, pic.base64, captureMode === 'text' ? 'ocr' : 'object');
     } catch {
       /* shutter failed — stay idle */
     }
@@ -218,14 +224,30 @@ export default function CaptureScreen() {
         </View>
 
         {phase === 'idle' && (
-          <View style={[styles.fsControls, { paddingBottom: insets.bottom + spacing.xxl }]}>
-            <PressableScale onPress={pickFromLibrary} style={styles.fsSide}>
-              <Icon name="images-outline" size={26} color="#fff" />
-            </PressableScale>
-            <PressableScale onPress={takePhoto} haptic={false} style={styles.shutterOuter}>
-              <View style={styles.shutterInner} />
-            </PressableScale>
-            <View style={styles.fsSide} />
+          <View style={[styles.fsBottom, { paddingBottom: insets.bottom + spacing.xxl }]}>
+            {/* Object / Text mode toggle */}
+            <View style={styles.modeToggle}>
+              {(['object', 'text'] as const).map((m) => (
+                <PressableScale
+                  key={m}
+                  onPress={() => setCaptureMode(m)}
+                  haptic={false}
+                  style={[styles.modeChip, captureMode === m && styles.modeChipOn]}
+                >
+                  <Icon name={m === 'object' ? 'cube-outline' : 'text-outline'} size={14} color="#fff" />
+                  <AppText variant="footnote" color="#fff">{m === 'object' ? 'もの' : '文字'}</AppText>
+                </PressableScale>
+              ))}
+            </View>
+            <View style={styles.fsControls}>
+              <PressableScale onPress={pickFromLibrary} style={styles.fsSide}>
+                <Icon name="images-outline" size={26} color="#fff" />
+              </PressableScale>
+              <PressableScale onPress={takePhoto} haptic={false} style={styles.shutterOuter}>
+                <View style={styles.shutterInner} />
+              </PressableScale>
+              <View style={styles.fsSide} />
+            </View>
           </View>
         )}
       </View>
@@ -365,10 +387,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
     backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: 999,
   },
+  fsBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', gap: spacing.md },
   fsControls: {
-    position: 'absolute', left: 0, right: 0, bottom: 0,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xxl,
+    width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xxl,
   },
+  modeToggle: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 999, padding: 3, gap: 2 },
+  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: 999 },
+  modeChipOn: { backgroundColor: 'rgba(255,255,255,0.28)' },
   fsSide: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)' },
   shutterOuter: { width: 78, height: 78, borderRadius: 39, borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#fff' },

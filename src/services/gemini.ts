@@ -26,11 +26,12 @@ async function callBackend<T>(action: string, payload: Record<string, unknown>):
 }
 
 export const geminiIdentify: IdentifyService = {
-  async identify({ imageBase64, photo, target, native }) {
+  async identify({ imageBase64, photo, target, native, mode }) {
     const { candidates } = await callBackend<{ candidates: IdentifyCandidate[] }>('identify', {
       imageBase64: imageBase64 ?? photo,
       target,
       native,
+      mode: mode ?? 'object',
     });
     return candidates ?? [];
   },
