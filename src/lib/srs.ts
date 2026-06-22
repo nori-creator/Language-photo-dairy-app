@@ -56,16 +56,14 @@ export function isDue(state: SrsState, now: Date = new Date()): boolean {
 
 /**
  * Forgetting-blur intensity (0 = crisp, 1 = nearly gone).
- * Each lapse fades the photo a little more; recalling it correctly
- * (lapses unchanged while repetitions grow) keeps it sharp.
- * This powers the loss-aversion mechanic.
+ * Driven mainly by how long the card is *overdue* — about a week past its
+ * review date fades it heavily — plus extra fade for repeated lapses. Recalling
+ * it (which pushes dueAt into the future) instantly restores sharpness. This
+ * powers the loss-aversion mechanic. Capped below 1 so a silhouette remains.
  */
 export function blurAmount(state: SrsState): number {
-  const overdueDays = Math.max(
-    0,
-    (Date.now() - new Date(state.dueAt).getTime()) / 86_400_000
-  );
-  const fromLapses = Math.min(0.7, state.lapses * 0.2);
-  const fromOverdue = Math.min(0.3, overdueDays / 30);
-  return Math.min(1, fromLapses + fromOverdue);
+  const overdueDays = Math.max(0, (Date.now() - new Date(state.dueAt).getTime()) / 86_400_000);
+  const fromOverdue = Math.min(0.8, (overdueDays / 7) * 0.8); // ~0.8 after 1 week overdue
+  const fromLapses = Math.min(0.4, state.lapses * 0.15);
+  return Math.min(0.9, fromOverdue + fromLapses);
 }
