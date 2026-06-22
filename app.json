@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Lexilog",
+    "slug": "photo-vocab-diary",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "lexilog",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lexilog.app"
+    },
+    "android": {
+      "package": "com.lexilog.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A84FF"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "撮った被写体を単語カードにするためにカメラを使用します。"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "写真から単語カードを作成するためにライブラリにアクセスします。"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "撮影した場所を記録し、思い出として振り返るために使用します。"
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "発音の採点のためにマイクを使用します。"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
