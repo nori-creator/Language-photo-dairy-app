@@ -103,13 +103,42 @@ async function identify(body: any) {
   return json({ candidates: Array.isArray(candidates) ? candidates : [] });
 }
 
+// 教育部 (MOE) authoritative data via moedict — gives correct Zhuyin & 詞性.
+const POS_JA: Record<string, string> = {
+  名: '名詞', 動: '動詞', 形: '形容詞', 副: '副詞', 代: '代名詞',
+  介: '介詞', 連: '連接詞', 助: '助詞', 嘆: '感嘆詞', 數: '數詞', 量: '量詞',
+};
+
+async function fetchMoedict(word: string): Promise<{ bopomofo: string; pos: string; def: string } | null> {
+  try {
+    const res = await fetch(`https://www.moedict.tw/uni/${encodeURIComponent(word)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const h = (data?.h ?? data?.heteronyms ?? [])[0];
+    if (!h) return null;
+    const bopomofo = h.b ?? h.bopomofo ?? '';
+    const d0 = (h.d ?? h.definitions ?? [])[0] ?? {};
+    const pos = (d0.type ?? '').trim();
+    const def = (d0.f ?? d0.def ?? '').replace(/`|~/g, '');
+    return { bopomofo, pos, def };
+  } catch {
+    return null;
+  }
+}
+
 async function enrich(body: any) {
-  const { word, target, native } = body;
+  const { word } = body;
   if (!word) return json({ error: 'word required' }, 400);
+
+  const md = await fetchMoedict(word);
+  const grounding = md
+    ? `Authoritative 台灣教育部 data for "${word}" — Zhuyin(注音): "${md.bopomofo}"; 詞性: "${md.pos}"; ` +
+      `中文定義: "${md.def}". Treat these as ground truth; base the Japanese meaning on the 中文定義. `
+    : '';
 
   const prompt =
     `You are a professional Taiwan Mandarin (台灣華語) lexicographer. Build an ACCURATE vocabulary ` +
-    `flash-card for the word "${word}". Every field must be linguistically correct and natural to ` +
+    `flash-card for the word "${word}". ${grounding}Every field must be linguistically correct and natural to ` +
     `native Taiwanese speakers (台灣教育部 usage); example sentences must be natural daily Taiwan usage, ` +
     `grammatical, and actually contain the word. ` +
     `Treat it strictly as Taiwan Mandarin — NEVER as Japanese, NEVER Simplified Chinese. ` +
@@ -127,6 +156,9 @@ async function enrich(body: any) {
     `Use empty arrays/strings when not applicable. No markdown, no extra text.`;
 
   const fields = await callGemini([{ text: prompt }], body.model);
+  // Override with authoritative MOE values when available.
+  if (md?.bopomofo) fields.reading = md.bopomofo;
+  if (md?.pos) fields.partOfSpeech = POS_JA[md.pos[0]] ?? fields.partOfSpeech ?? md.pos;
   return json({ fields });
 }
 
