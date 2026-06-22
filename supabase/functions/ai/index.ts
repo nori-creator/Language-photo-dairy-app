@@ -11,6 +11,8 @@ const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 // gemini-2.5-flash-lite has the largest free-tier quota and is multimodal.
 const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash-lite';
 const REMOVEBG_API_KEY = Deno.env.get('REMOVEBG_API_KEY') ?? '';
+const AZURE_SPEECH_KEY = Deno.env.get('AZURE_SPEECH_KEY') ?? '';
+const AZURE_SPEECH_REGION = Deno.env.get('AZURE_SPEECH_REGION') ?? 'japaneast';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -207,6 +209,65 @@ async function cutout(body: any) {
   return json({ pngBase64 });
 }
 
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+
+// Azure Pronunciation Assessment (phoneme-level) via the short-audio REST API.
+async function pronounce(body: any) {
+  const { audioBase64, referenceText } = body;
+  if (!audioBase64 || !referenceText) return json({ error: 'audioBase64 and referenceText required' }, 400);
+  if (!AZURE_SPEECH_KEY) return json({ error: 'AZURE_SPEECH_KEY not set' }, 501);
+
+  const paConfig = btoa(
+    JSON.stringify({ ReferenceText: referenceText, GradingSystem: 'HundredMark', Granularity: 'Phoneme', Dimension: 'Comprehensive', EnableMiscue: true }),
+  );
+  const url =
+    `https://${AZURE_SPEECH_REGION}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=zh-TW&format=detailed`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Ocp-Apim-Subscription-Key': AZURE_SPEECH_KEY,
+      'Content-Type': 'audio/wav; codecs=audio/pcm; samplerate=16000',
+      'Pronunciation-Assessment': paConfig,
+      Accept: 'application/json',
+    },
+    body: b64ToBytes(audioBase64),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    console.error(`Azure ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(`Azure ${res.status}: ${text.slice(0, 160)}`);
+  }
+  const data = JSON.parse(text);
+  const nb = data?.NBest?.[0];
+  const pa = nb?.PronunciationAssessment ?? {};
+  return json({
+    recognized: data?.DisplayText ?? nb?.Display ?? '',
+    accuracy: pa.AccuracyScore ?? 0,
+    fluency: pa.FluencyScore ?? 0,
+    completeness: pa.CompletenessScore ?? 0,
+    pron: pa.PronScore ?? 0,
+  });
+}
+
+// 4-choice quiz distractors (wrong Japanese meanings) from the same category.
+async function quiz(body: any) {
+  const { word, meaning, categoryId } = body;
+  if (!word) return json({ error: 'word required' }, 400);
+  const prompt =
+    `For a Japanese learner of Taiwan Mandarin, create 3 PLAUSIBLE but INCORRECT Japanese meanings ` +
+    `to use as multiple-choice distractors for the word "${word}" (category: "${categoryId ?? 'object'}"). ` +
+    `The correct meaning is "${meaning ?? ''}". The distractors must be the same kind of thing (same category), ` +
+    `short, natural Japanese, and clearly DIFFERENT from the correct meaning. ` +
+    `Respond with ONLY a JSON array of exactly 3 short Japanese strings. No markdown.`;
+  const distractors = await callGemini([{ text: prompt }], body.model);
+  return json({ distractors: Array.isArray(distractors) ? distractors.slice(0, 3) : [] });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
@@ -221,6 +282,11 @@ Deno.serve(async (req) => {
         return await enrich(body);
       case 'tts':
         return await tts(body);
+      case 'pronounce':
+        return await pronounce(body);
+      case 'quiz':
+        if (!GEMINI_API_KEY) return json({ error: 'GEMINI_API_KEY not set' }, 500);
+        return await quiz(body);
       case 'cutout':
         return await cutout(body);
       default:
