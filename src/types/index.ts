@@ -102,6 +102,8 @@ export interface Profile {
   lastActiveDate: string; // YYYY-MM-DD
   /** Hour (0-23) the user typically studies — drives next-day reminders. */
   habitHour: number | null;
+  /** Pronunciation-judging strictness for SRS repair. */
+  pronStrictness?: 'lenient' | 'normal' | 'strict';
   /** Certification word-count goal, e.g. TOEFL. */
   goal?: { name: string; requiredWords: number };
 }

@@ -57,5 +57,6 @@ export const DEFAULT_PROFILE: Profile = {
   streak: 3,
   lastActiveDate: new Date().toISOString().slice(0, 10),
   habitHour: 20,
+  pronStrictness: 'normal',
   goal: { name: 'TOCFL Band A', requiredWords: 500 },
 };

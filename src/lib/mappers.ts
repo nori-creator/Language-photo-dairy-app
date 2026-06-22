@@ -83,6 +83,7 @@ export function rowToProfile(r: any): Profile {
     streak: r.streak ?? 0,
     lastActiveDate: r.last_active_date ?? new Date().toISOString().slice(0, 10),
     habitHour: r.habit_hour ?? null,
+    pronStrictness: r.pron_strictness ?? 'normal',
     goal: r.goal_name ? { name: r.goal_name, requiredWords: r.goal_required_words ?? 0 } : undefined,
   };
 }
@@ -96,6 +97,7 @@ export function profileToRow(p: Profile, userId: string) {
     streak: p.streak,
     last_active_date: p.lastActiveDate,
     habit_hour: p.habitHour,
+    pron_strictness: p.pronStrictness ?? 'normal',
     goal_name: p.goal?.name ?? null,
     goal_required_words: p.goal?.requiredWords ?? null,
   };

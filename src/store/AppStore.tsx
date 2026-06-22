@@ -19,6 +19,7 @@ interface AppState {
   addCard: (card: VocabCard) => Promise<void>;
   reviewCard: (id: string, recall: Recall) => void;
   deleteCard: (id: string) => Promise<void>;
+  updateProfile: (patch: Partial<Profile>) => void;
   capturedToday: number;
   diary: DiaryEntry[];
   signOut: () => Promise<void>;
@@ -138,6 +139,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await supabase.from('cards').delete().eq('id', id);
   }, []);
 
+  const updateProfile = useCallback(
+    (patch: Partial<Profile>) => {
+      const userId = session?.user.id;
+      setProfile((prev) => {
+        const next = { ...prev, ...patch };
+        if (userId) supabase.from('profiles').upsert(profileToRow(next, userId)).then(() => {});
+        return next;
+      });
+    },
+    [session?.user.id],
+  );
+
   // ── Offline capture queue: stickerize pending captures once back online ────
   const processing = useRef(false);
   const processQueue = useCallback(async () => {
@@ -224,8 +237,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const diary = useMemo(() => buildDiary(cards), [cards]);
 
   const value = useMemo(
-    () => ({ session, loading, cards, profile, addCard, reviewCard, deleteCard, capturedToday, diary, signOut }),
-    [session, loading, cards, profile, addCard, reviewCard, deleteCard, capturedToday, diary, signOut],
+    () => ({ session, loading, cards, profile, addCard, reviewCard, deleteCard, updateProfile, capturedToday, diary, signOut }),
+    [session, loading, cards, profile, addCard, reviewCard, deleteCard, updateProfile, capturedToday, diary, signOut],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

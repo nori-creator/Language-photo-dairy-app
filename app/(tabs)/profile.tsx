@@ -2,12 +2,19 @@ import { useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useApp } from '@/store/AppStore';
 import { isDue } from '@/lib/srs';
-import { spacing, useColors } from '@/theme';
-import { AppText, Card, Icon, ListGroup, PrimaryButton, ProgressBar, Row } from '@/components';
+import { feedback } from '@/lib/feedback';
+import { radius, spacing, useColors } from '@/theme';
+import { AppText, Card, Icon, ListGroup, PressableScale, PrimaryButton, ProgressBar, Row } from '@/components';
 import { Ionicons } from '@expo/vector-icons';
 
+const STRICTNESS: { key: 'lenient' | 'normal' | 'strict'; label: string }[] = [
+  { key: 'lenient', label: 'やさしい' },
+  { key: 'normal', label: 'ふつう' },
+  { key: 'strict', label: 'きびしい' },
+];
+
 export default function ProfileScreen() {
-  const { cards, profile, session, signOut } = useApp();
+  const { cards, profile, session, signOut, updateProfile } = useApp();
   const colors = useColors();
 
   const stats = useMemo(() => {
@@ -58,6 +65,29 @@ export default function ProfileScreen() {
         </AppText>
       </Card>
 
+      {/* Pronunciation strictness */}
+      <Card>
+        <AppText variant="headline">発音判定の厳しさ</AppText>
+        <AppText variant="footnote" color={colors.secondaryLabel} style={{ marginTop: spacing.xs, marginBottom: spacing.md }}>
+          復習でぼやけを直すときの発音採点の合格ラインです。
+        </AppText>
+        <View style={styles.segment}>
+          {STRICTNESS.map((s) => {
+            const active = (profile.pronStrictness ?? 'normal') === s.key;
+            return (
+              <PressableScale
+                key={s.key}
+                haptic={false}
+                onPress={() => { feedback.tap(); updateProfile({ pronStrictness: s.key }); }}
+                style={[styles.segItem, { backgroundColor: active ? colors.blue : colors.fill }]}
+              >
+                <AppText variant="subhead" color={active ? '#fff' : colors.label}>{s.label}</AppText>
+              </PressableScale>
+            );
+          })}
+        </View>
+      </Card>
+
       {/* Settings */}
       <ListGroup>
         <Row label="学習言語" value="台湾華語 (繁体字)" />
@@ -93,4 +123,6 @@ const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center', gap: 2 },
   statIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  segment: { flexDirection: 'row', gap: spacing.sm },
+  segItem: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 40, borderRadius: radius.md },
 });

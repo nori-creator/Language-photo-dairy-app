@@ -40,6 +40,12 @@
         {
           "locationWhenInUsePermission": "撮影した場所を記録し、思い出として振り返るために使用します。"
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "発音の採点のためにマイクを使用します。"
+        }
       ]
     ],
     "experiments": {
